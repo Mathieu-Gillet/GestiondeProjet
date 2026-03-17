@@ -94,6 +94,11 @@ cp -r "$APP_DIR/client/dist/." "$APP_DIR/server/public/"
 
 mkdir -p "$APP_DIR/server/data"
 mkdir -p "$APP_DIR/logs"
+
+# Initialisation de la base de données SQLite
+echo "    Initialisation de la base de données..."
+cd "$APP_DIR/server" && node --experimental-sqlite src/db/init.js
+
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 # ─── Certificat SSL auto-signé ────────────────────────────────────────────────

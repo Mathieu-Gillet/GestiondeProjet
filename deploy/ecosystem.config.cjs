@@ -9,9 +9,9 @@ module.exports = {
       script: 'src/app.js',
       cwd: '/opt/tracker/server',
 
-      // Interpréteur Node.js avec le flag requis pour node:sqlite
-      interpreter: 'node',
-      interpreter_args: '--experimental-sqlite',
+      // node:sqlite nécessite --experimental-sqlite
+      // On passe via node_args (plus fiable que interpreter_args sous PM2)
+      node_args: '--experimental-sqlite',
 
       // Environnement de production
       env: {
