@@ -7,6 +7,8 @@ export const taskService = {
     api.post(`/projects/${projectId}/tasks`, data).then((r) => r.data),
   update: (projectId, taskId, data) =>
     api.put(`/projects/${projectId}/tasks/${taskId}`, data).then((r) => r.data),
+  patchStatus: (projectId, taskId, status) =>
+    api.patch(`/projects/${projectId}/tasks/${taskId}/status`, { status }).then((r) => r.data),
   remove: (projectId, taskId) =>
     api.delete(`/projects/${projectId}/tasks/${taskId}`).then((r) => r.data),
 }

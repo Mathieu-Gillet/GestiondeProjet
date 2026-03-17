@@ -95,6 +95,21 @@ db.exec(`
     END;
 `);
 
+// Table notifications
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id    INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+    task_id       INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    from_user_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    type          TEXT NOT NULL DEFAULT 'task_status_changed',
+    message       TEXT NOT NULL,
+    read          INTEGER NOT NULL DEFAULT 0,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Migration : ajout des colonnes tâches (idempotent)
 const taskMigrations = [
   'ALTER TABLE tasks ADD COLUMN start_date DATE',
@@ -106,53 +121,5 @@ for (const sql of taskMigrations) {
   try { db.exec(sql); } catch (_) { /* colonne déjà présente */ }
 }
 
-// Tables cartographie de flux métiers
-db.exec(`
-  CREATE TABLE IF NOT EXISTS flow_diagrams (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT NOT NULL,
-    description TEXT DEFAULT '',
-    pole        TEXT DEFAULT 'all' CHECK(pole IN ('dev', 'network', 'all')),
-    created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at  TEXT DEFAULT (datetime('now')),
-    updated_at  TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS flow_nodes (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    diagram_id  INTEGER NOT NULL REFERENCES flow_diagrams(id) ON DELETE CASCADE,
-    node_id     TEXT NOT NULL,
-    type        TEXT NOT NULL DEFAULT 'process',
-    label       TEXT NOT NULL DEFAULT '',
-    description TEXT DEFAULT '',
-    color       TEXT DEFAULT '#6B7280',
-    pos_x       REAL DEFAULT 0,
-    pos_y       REAL DEFAULT 0,
-    width       REAL DEFAULT 160,
-    height      REAL DEFAULT 60,
-    metadata    TEXT DEFAULT '{}'
-  );
-
-  CREATE TABLE IF NOT EXISTS flow_edges (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    diagram_id    INTEGER NOT NULL REFERENCES flow_diagrams(id) ON DELETE CASCADE,
-    edge_id       TEXT NOT NULL,
-    source_node   TEXT NOT NULL,
-    target_node   TEXT NOT NULL,
-    source_handle TEXT DEFAULT '',
-    target_handle TEXT DEFAULT '',
-    label         TEXT DEFAULT '',
-    edge_type     TEXT DEFAULT 'smoothstep',
-    animated      INTEGER DEFAULT 0,
-    dashed        INTEGER DEFAULT 0
-  );
-
-  CREATE TRIGGER IF NOT EXISTS flow_diagrams_updated_at
-    AFTER UPDATE ON flow_diagrams
-    FOR EACH ROW
-    BEGIN
-      UPDATE flow_diagrams SET updated_at = datetime('now') WHERE id = OLD.id;
-    END;
-`);
 
 console.log(`✅ Base de données initialisée : ${dbPath}`);

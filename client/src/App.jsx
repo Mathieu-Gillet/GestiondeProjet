@@ -6,8 +6,6 @@ import CalendarPage from './components/Calendar/CalendarPage'
 import ArchivesPage from './components/Archives/ArchivesPage'
 import AdminUsersPage from './components/Admin/AdminUsersPage'
 import AdminTagsPage from './components/Admin/AdminTagsPage'
-import FlowsPage from './components/Flows/FlowsPage'
-import FlowEditor from './components/Flows/FlowEditor'
 import MonEspacePage from './components/MonEspace/MonEspacePage'
 import useAuthStore from './store/authStore'
 
@@ -67,26 +65,6 @@ export default function App() {
             <PrivateRoute>
               <AppShell>
                 <AdminTagsPage />
-              </AppShell>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/flows"
-          element={
-            <PrivateRoute>
-              <AppShell>
-                <FlowsPage />
-              </AppShell>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/flows/:id"
-          element={
-            <PrivateRoute>
-              <AppShell>
-                <FlowEditor />
               </AppShell>
             </PrivateRoute>
           }
