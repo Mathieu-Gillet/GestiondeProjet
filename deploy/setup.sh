@@ -29,13 +29,13 @@ echo ""
 # ─── Mise à jour système ──────────────────────────────────────────────────────
 echo ">>> [1/9] Mise à jour des paquets système..."
 apt-get update -y -qq
-apt-get install -y -qq curl openssl nginx git rsync
+apt-get install -y -qq --fix-missing curl openssl nginx git rsync
 
 # ─── Node.js 20 ───────────────────────────────────────────────────────────────
 echo ">>> [2/9] Installation de Node.js 20..."
 if ! command -v node &>/dev/null || [[ "$(node -v)" != v20* ]]; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
-  apt-get install -y -qq nodejs
+  apt-get install -y -qq --fix-missing nodejs
 fi
 echo "    Node.js $(node -v) — npm $(npm -v)"
 
