@@ -6,6 +6,7 @@ import ProjectModal from '../Project/ProjectModal'
 import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
 import { POLE_CONFIG, PRIORITY_CONFIG } from '../../utils/format'
+import { exportService } from '../../services/exportService'
 
 const STATUSES = ['backlog', 'in_progress', 'on_hold', 'done']
 
@@ -19,7 +20,14 @@ export default function Board() {
   const [boardYear, setBoardYear] = useState(currentYear)
   const isCurrentYear = boardYear === currentYear
 
-  const canDrag = user?.role === 'admin' || user?.role === 'lead'
+  const canDrag    = user?.role === 'admin' || user?.role === 'lead'
+  const canExport  = user?.role === 'admin' || user?.role === 'lead'
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try { await exportService.downloadProjects() } finally { setExporting(false) }
+  }
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -73,7 +81,7 @@ export default function Board() {
 
   return (
     <>
-      {/* Sélecteur d'année */}
+      {/* Sélecteur d'année + bouton export */}
       <div className="flex items-center gap-3 mb-4 flex-shrink-0">
         <button
           onClick={() => setBoardYear((y) => y - 1)}
@@ -105,6 +113,22 @@ export default function Board() {
             {boardYear < currentYear ? 'Archive' : 'Planifié'} {boardYear} · {archivedProjects.length} projet{archivedProjects.length > 1 ? 's' : ''}
             {boardYear < currentYear && ` terminé${archivedProjects.length > 1 ? 's' : ''}`}
           </span>
+        )}
+
+        {/* Bouton export Excel — admin et leads uniquement */}
+        {canExport && (
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={`Exporter les projets en cours et terminés de ${new Date().getFullYear()} en Excel`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {exporting ? 'Export...' : `Export Excel ${new Date().getFullYear()}`}
+          </button>
         )}
       </div>
 

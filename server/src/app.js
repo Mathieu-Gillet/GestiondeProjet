@@ -41,6 +41,7 @@ app.use('/api/projects', require('./routes/projects'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/tags', require('./routes/tags'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/export',        require('./routes/export'));
 
 // En production : servir le frontend React compilé
 if (process.env.NODE_ENV === 'production') {

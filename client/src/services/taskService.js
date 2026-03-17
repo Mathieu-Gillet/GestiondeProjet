@@ -9,6 +9,8 @@ export const taskService = {
     api.put(`/projects/${projectId}/tasks/${taskId}`, data).then((r) => r.data),
   patchStatus: (projectId, taskId, status) =>
     api.patch(`/projects/${projectId}/tasks/${taskId}/status`, { status }).then((r) => r.data),
+  patchNotes: (projectId, taskId, notes) =>
+    api.patch(`/projects/${projectId}/tasks/${taskId}/notes`, { notes }).then((r) => r.data),
   remove: (projectId, taskId) =>
     api.delete(`/projects/${projectId}/tasks/${taskId}`).then((r) => r.data),
 }

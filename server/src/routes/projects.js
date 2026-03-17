@@ -23,6 +23,8 @@ router.put('/:id/tasks/:taskId',          authenticate, requireRole('admin', 'le
 router.delete('/:id/tasks/:taskId',       authenticate, requireRole('admin', 'lead'), taskCtrl.remove);
 // Mise à jour du statut : tous les utilisateurs (membres peuvent valider leurs tâches)
 router.patch('/:id/tasks/:taskId/status', authenticate, taskCtrl.updateStatus);
+// Mise à jour des notes : tous les utilisateurs (membres pour leurs tâches)
+router.patch('/:id/tasks/:taskId/notes',  authenticate, taskCtrl.patchNotes);
 
 // Commentaires : tous les utilisateurs
 router.post('/:id/comments', authenticate, ctrl.addComment);

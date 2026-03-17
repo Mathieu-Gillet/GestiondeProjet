@@ -80,8 +80,10 @@ function ProjectCard({ project, onOpen }) {
   )
 }
 
-function TaskRow({ task, onToggleDone }) {
-  const [toggling, setToggling] = useState(false)
+function TaskRow({ task, onToggleDone, onSaveNotes }) {
+  const [toggling,      setToggling]      = useState(false)
+  const [showNotes,     setShowNotes]     = useState(false)
+  const [notesValue,    setNotesValue]    = useState(task.notes || '')
   const poleCfg  = POLE_CONFIG[task.project_pole] || {}
   const overdue  = isOverdue(task.due_date) && task.status !== 'done'
   const isDone   = task.status === 'done'
@@ -89,66 +91,100 @@ function TaskRow({ task, onToggleDone }) {
   async function handleToggle(e) {
     e.stopPropagation()
     setToggling(true)
-    try {
-      await onToggleDone(task)
-    } finally {
-      setToggling(false)
-    }
+    try { await onToggleDone(task) } finally { setToggling(false) }
+  }
+
+  async function handleBlurNotes() {
+    if (notesValue === (task.notes || '')) return
+    await onSaveNotes(task, notesValue || null)
   }
 
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${isDone ? 'border-gray-100 bg-gray-50' : 'border-gray-200 bg-white hover:border-indigo-200'}`}>
-      {/* Bouton validation */}
-      <button
-        onClick={handleToggle}
-        disabled={toggling}
-        title={isDone ? 'Marquer comme à faire' : 'Marquer comme terminée'}
-        className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-          isDone
-            ? 'bg-green-100 border-green-400 hover:bg-green-200'
-            : task.status === 'in_progress'
-            ? 'bg-blue-50 border-blue-400 hover:bg-blue-100'
-            : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50'
-        } ${toggling ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-      >
-        {isDone && (
-          <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-          </svg>
-        )}
-        {task.status === 'in_progress' && !isDone && (
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
-        )}
-      </button>
-
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-          {task.title}
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
+    <div className={`rounded-lg border transition-colors ${isDone ? 'border-gray-100 bg-gray-50' : 'border-gray-200 bg-white hover:border-indigo-200'}`}>
+      <div className="flex items-center gap-3 p-3">
+        {/* Bouton statut */}
+        <button
+          onClick={handleToggle}
+          disabled={toggling}
+          title={isDone ? 'Marquer comme à faire' : 'Changer le statut'}
+          className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+            isDone
+              ? 'bg-green-100 border-green-400 hover:bg-green-200'
+              : task.status === 'in_progress'
+              ? 'bg-blue-50 border-blue-400 hover:bg-blue-100'
+              : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50'
+          } ${toggling ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          {isDone && (
+            <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
-            <span className="truncate max-w-[160px]">{task.project_title}</span>
-          </span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${poleCfg.color || 'bg-gray-100 text-gray-500'}`}>
-            {poleCfg.label || task.project_pole}
-          </span>
+          )}
+          {task.status === 'in_progress' && !isDone && (
+            <div className="w-2 h-2 rounded-full bg-blue-500" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+            {task.title}
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7" />
+              </svg>
+              <span className="truncate max-w-[160px]">{task.project_title}</span>
+            </span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${poleCfg.color || 'bg-gray-100 text-gray-500'}`}>
+              {poleCfg.label || task.project_pole}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="text-right">
+            {task.due_date && (
+              <p className={`text-xs font-medium ${overdue ? 'text-red-600' : 'text-gray-400'}`}>
+                {overdue ? '⚠ ' : ''}{formatDate(task.due_date)}
+              </p>
+            )}
+            {task.duration_days > 0 && (
+              <p className="text-[10px] text-gray-400 mt-0.5">{task.duration_days}j</p>
+            )}
+          </div>
+          {/* Bouton notes */}
+          <button
+            onClick={() => setShowNotes((v) => !v)}
+            title={showNotes ? 'Masquer les notes' : 'Afficher / ajouter des notes'}
+            className={`p-1 rounded transition-colors ${
+              showNotes ? 'text-indigo-600' : task.notes ? 'text-amber-500 hover:text-amber-700' : 'text-gray-300 hover:text-gray-500'
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      <div className="flex-shrink-0 text-right">
-        {task.due_date && (
-          <p className={`text-xs font-medium ${overdue ? 'text-red-600' : 'text-gray-400'}`}>
-            {overdue ? '⚠ ' : ''}{formatDate(task.due_date)}
-          </p>
-        )}
-        {task.duration_days > 0 && (
-          <p className="text-[10px] text-gray-400 mt-0.5">{task.duration_days}j</p>
-        )}
-      </div>
+      {/* Notes expandables */}
+      {showNotes && (
+        <div className="px-3 pb-3">
+          <textarea
+            className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-indigo-50/30"
+            rows={4}
+            placeholder="Notes, avancement, points de blocage..."
+            value={notesValue}
+            onChange={(e) => setNotesValue(e.target.value)}
+            onBlur={handleBlurNotes}
+            autoFocus
+          />
+          <p className="text-[10px] text-gray-400 mt-1">Sauvegardé automatiquement à la perte du focus.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -186,6 +222,11 @@ export default function MonEspacePage() {
     setTasks((prev) =>
       prev.map((t) => t.id === task.id ? { ...t, status: newStatus } : t)
     )
+  }
+
+  async function handleSaveNotes(task, notes) {
+    const updated = await taskService.patchNotes(task.project_id, task.id, notes)
+    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, notes: updated.notes } : t))
   }
 
   const activeTasks  = tasks.filter((t) => t.status !== 'done')
@@ -350,7 +391,7 @@ export default function MonEspacePage() {
           ) : (
             <div className="flex flex-col gap-2">
               {visibleTasks.map((t) => (
-                <TaskRow key={t.id} task={t} onToggleDone={handleToggleDone} />
+                <TaskRow key={t.id} task={t} onToggleDone={handleToggleDone} onSaveNotes={handleSaveNotes} />
               ))}
             </div>
           )}

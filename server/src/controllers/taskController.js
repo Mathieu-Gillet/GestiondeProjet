@@ -12,6 +12,7 @@ const taskSchema = z.object({
   due_date:      dateStr,
   depends_on:    z.number().int().nullable().optional(),
   assigned_to:   z.number().int().nullable().optional(),
+  notes:         z.string().nullable().optional(),
 });
 
 const STATUS_LABELS = { todo: 'À faire', in_progress: 'En cours', done: 'Terminé' };
@@ -63,7 +64,7 @@ function create(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to } = result.data;
+  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, notes } = result.data;
 
   // Validation : start_date >= project.start_date
   if (start_date && project.start_date && start_date < project.start_date) {
@@ -86,10 +87,10 @@ function create(req, res) {
   const position = (maxPos.m ?? -1) + 1;
 
   const info = db.prepare(`
-    INSERT INTO tasks (project_id, title, duration_days, status, position, start_date, due_date, depends_on, assigned_to)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (project_id, title, duration_days, status, position, start_date, due_date, depends_on, assigned_to, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(req.params.id, title, duration_days, status, position,
-      start_date ?? null, due_date ?? null, depends_on ?? null, assigned_to ?? null);
+      start_date ?? null, due_date ?? null, depends_on ?? null, assigned_to ?? null, notes ?? null);
 
   const task = fetchTask(db, info.lastInsertRowid);
   broadcast('tasks_updated', { project_id: Number(req.params.id) });
@@ -140,6 +141,7 @@ function update(req, res) {
   if (due_date      !== undefined) { changes.push('due_date = ?');      params.push(due_date ?? null); }
   if (depends_on    !== undefined) { changes.push('depends_on = ?');    params.push(depends_on ?? null); }
   if (assigned_to   !== undefined) { changes.push('assigned_to = ?');   params.push(assigned_to ?? null); }
+  if (notes         !== undefined) { changes.push('notes = ?');         params.push(notes ?? null); }
 
   if (changes.length > 0) {
     params.push(req.params.taskId);
@@ -219,4 +221,23 @@ function remove(req, res) {
   res.json({ message: 'Tâche supprimée' });
 }
 
-module.exports = { list, create, update, updateStatus, remove };
+// ── patchNotes — accessible à tous les utilisateurs pour leurs tâches ────────
+function patchNotes(req, res) {
+  const result = z.object({ notes: z.string().nullable() }).safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: 'Données invalides' });
+
+  const db   = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?')
+    .get(req.params.taskId, req.params.id);
+  if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
+
+  if (req.user?.role === 'member' && task.assigned_to !== req.user.id) {
+    return res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres tâches.' });
+  }
+
+  db.prepare('UPDATE tasks SET notes = ? WHERE id = ?').run(result.data.notes ?? null, req.params.taskId);
+  const updated = fetchTask(db, req.params.taskId);
+  res.json(updated);
+}
+
+module.exports = { list, create, update, updateStatus, patchNotes, remove };

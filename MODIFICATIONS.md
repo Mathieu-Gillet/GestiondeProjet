@@ -616,6 +616,63 @@ Le champ de recherche a été **supprimé**.
 
 ---
 
+## Lot 9 — Notes de tâches + Export Excel (session 9)
+
+### 28. Champ notes par tâche — expandable au clic
+
+**Avant :** Les tâches ne disposaient d'aucun champ de commentaire ou de suivi personnel.
+
+**Après :** Chaque tâche affiche un bouton "Ajouter des notes" (crayon). Au clic, un textarea s'ouvre sous la ligne de tâche. La sauvegarde se fait automatiquement à la perte du focus (`onBlur`). La couleur du bouton change si des notes existent déjà (amber = notes présentes, gris = vide).
+
+**Comportement :**
+- Dans `ProjectModal` : bouton sous les métadonnées de chaque tâche ; seule la tâche en cours d'édition est expandée
+- Dans `MonEspacePage` : bouton icône crayon à droite de chaque ligne de tâche
+- Les membres ne peuvent modifier les notes que de leurs propres tâches (contrôle backend)
+- Sauvegarde via `PATCH /api/projects/:id/tasks/:taskId/notes`
+
+**Fichiers modifiés :**
+- `server/src/db/init.js` — migration `ALTER TABLE tasks ADD COLUMN notes TEXT`
+- `server/src/controllers/taskController.js` — notes dans taskSchema, create, update ; nouvelle fonction `patchNotes`
+- `server/src/routes/projects.js` — route `PATCH /:id/tasks/:taskId/notes`
+- `client/src/services/taskService.js` — méthode `patchNotes`
+- `client/src/components/Project/ProjectModal.jsx` — state `expandedNotesId` + `notesMap`, bouton + textarea expandable, répartition des panneaux inversée (tâches = `flex-1`, détails = `w-72`)
+- `client/src/components/MonEspace/MonEspacePage.jsx` — bouton crayon + textarea dans `TaskRow`, `handleSaveNotes`
+
+### 29. Répartition des panneaux dans ProjectModal
+
+**Avant :** Panneau gauche (détails + commentaires) = `flex-1` ; panneau droit (tâches) = `w-80` (320px fixe).
+
+**Après :** Panneau gauche (détails + commentaires) = `w-72` (288px fixe) ; panneau droit (tâches) = `flex-1` (prend l'espace restant, ~65% du modal).
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — classes CSS des deux panneaux
+
+### 30. Export Excel des projets
+
+**Avant :** Aucune fonctionnalité d'export de données.
+
+**Après :** Bouton "Export Excel [année]" dans la page Projets, visible uniquement pour les admins et leads. Génère un fichier `.xlsx` avec deux feuilles :
+- **Projets** : Titre, Pôle, Statut, Priorité, Responsable, Dates, Tâches totales, Tâches terminées, Avancement (%), Description
+- **Tâches** : Projet, Pôle, Tâche, Statut, Assignée à, Dates, Durée, Notes
+
+**Comportement :**
+- Périmètre : projets `in_progress` ou `done` ayant une activité dans l'année courante
+- Téléchargement direct via Axios (`responseType: 'blob'`) + `URL.createObjectURL`
+- Route protégée par `requireRole('admin', 'lead')`
+- Librairie : SheetJS (`xlsx`)
+
+**Fichiers créés :**
+- `server/src/controllers/exportController.js` — génération du fichier xlsx
+- `server/src/routes/export.js` — route `GET /api/export/projects`
+- `client/src/services/exportService.js` — `downloadProjects()`
+
+**Fichiers modifiés :**
+- `server/src/app.js` — enregistrement de la route `/api/export`
+- `server/package.json` — ajout dépendance `xlsx`
+- `client/src/components/Board/Board.jsx` — bouton export + `handleExport`
+
+---
+
 ## Commandes après mise à jour
 
 ```bash

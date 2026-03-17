@@ -17,6 +17,8 @@ export default function ProjectModal({ projectId, onClose }) {
   const [newTask, setNewTask]       = useState({ title: '', duration_days: 1, start_date: '', due_date: '', depends_on: '', assigned_to: '' })
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [editingTask, setEditingTask]     = useState({})
+  const [expandedNotesId, setExpandedNotesId] = useState(null)
+  const [notesMap, setNotesMap]           = useState({})
   const [activeTab, setActiveTab]   = useState('comments')
   const [showEdit, setShowEdit]     = useState(false)
   const [loading, setLoading]       = useState(true)
@@ -104,6 +106,22 @@ export default function ProjectModal({ projectId, onClose }) {
     const idx = TASK_STATUS_CYCLE.indexOf(task.status)
     const nextStatus = TASK_STATUS_CYCLE[(idx + 1) % 3]
     const updated = await taskService.patchStatus(projectId, task.id, nextStatus)
+    setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+  }
+
+  function handleToggleNotes(task) {
+    if (expandedNotesId === task.id) {
+      setExpandedNotesId(null)
+    } else {
+      setExpandedNotesId(task.id)
+      setNotesMap((prev) => ({ ...prev, [task.id]: prev[task.id] ?? (task.notes || '') }))
+    }
+  }
+
+  async function handleBlurNotes(task) {
+    const current = notesMap[task.id] ?? ''
+    if (current === (task.notes || '')) return
+    const updated = await taskService.patchNotes(projectId, task.id, current || null)
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
   }
 
@@ -238,7 +256,7 @@ export default function ProjectModal({ projectId, onClose }) {
           <div className="flex flex-1 min-h-0">
 
             {/* ── Panneau gauche : détails + onglets ── */}
-            <div className="flex-1 min-w-0 flex flex-col border-r border-gray-200 overflow-hidden">
+            <div className="w-72 flex-shrink-0 flex flex-col border-r border-gray-200 overflow-hidden">
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
                 {project.description && (
@@ -420,7 +438,7 @@ export default function ProjectModal({ projectId, onClose }) {
             </div>
 
             {/* ── Panneau droit : Tâches ── */}
-            <div className="w-80 flex-shrink-0 flex flex-col bg-gray-50/60">
+            <div className="flex-1 min-w-0 flex flex-col bg-gray-50/60">
               {/* En-tête panneau tâches */}
               <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
                 <div className="flex items-center justify-between">
@@ -629,6 +647,37 @@ export default function ProjectModal({ projectId, onClose }) {
                             )}
                           </div>
                         )}
+
+                        {/* Bouton notes + textarea expandable */}
+                        <div className="mt-1 pl-6">
+                          <button
+                            onClick={() => handleToggleNotes(task)}
+                            className={`text-[10px] flex items-center gap-1 transition-colors ${
+                              expandedNotesId === task.id
+                                ? 'text-indigo-600 font-medium'
+                                : task.notes
+                                ? 'text-amber-600 font-medium'
+                                : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            {task.notes ? 'Notes (cliquer pour modifier)' : 'Ajouter des notes'}
+                          </button>
+                          {expandedNotesId === task.id && (
+                            <textarea
+                              className="mt-1.5 w-full border border-indigo-200 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"
+                              rows={4}
+                              placeholder="Notes, avancement, points de blocage..."
+                              value={notesMap[task.id] ?? ''}
+                              onChange={(e) => setNotesMap((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                              onBlur={() => handleBlurNotes(task)}
+                              autoFocus
+                            />
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
