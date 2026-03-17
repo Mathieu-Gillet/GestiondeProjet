@@ -419,6 +419,154 @@ Le champ de recherche a été **supprimé**.
 
 ---
 
+## Lot 6 — Retours utilisateurs (session 6)
+
+### 19. Suppression du module Flux métiers
+
+**Avant :** Module de cartographie de flux métiers complet (FlowsPage, FlowEditor, 6 types de nœuds, tables SQLite flow_diagrams/flow_nodes/flow_edges, routes `/flows` et `/flows/:id`).
+
+**Après :** Toutes les routes, imports et tables du module supprimés. La route `/api/flows` est remplacée par `/api/notifications`.
+
+**Fichiers modifiés :**
+- `client/src/App.jsx` — imports et routes flows supprimés
+- `client/src/components/Layout/TopBar.jsx` — lien nav "Flux métiers" supprimé
+- `server/src/app.js` — route `/api/flows` remplacée par `/api/notifications`
+- `server/src/db/init.js` — tables flow_diagrams/flow_nodes/flow_edges supprimées
+
+---
+
+### 20. Système de notifications en cas de changement de statut de tâche
+
+**Avant :** Aucune notification. Les responsables ne savaient pas qu'un membre avait modifié une tâche.
+
+**Après :** Quand un utilisateur change le statut d'une tâche via le ProjectModal ou Mon Espace, le responsable du projet (owner) reçoit une notification. Les notifications s'affichent via une cloche dans la barre de navigation avec badge de comptage non lu. Clic = marque toutes comme lues automatiquement.
+
+**Comportement :**
+- Table `notifications` en base (user_id, project_id, task_id, from_user_id, message, read)
+- Le changement de statut déclenche un `broadcastToUser(ownerId, 'notification', ...)` via SSE (temps réel si l'owner est connecté)
+- Le SSE est maintenant par utilisateur (`Map<userId, Set<res>>` au lieu d'un `Set` global)
+- Dropdown dans le TopBar : liste des 20 dernières notifs, lien "Tout marquer lu"
+
+**Fichiers créés :**
+- `server/src/controllers/notificationController.js` — list, markRead, markAllRead
+- `server/src/routes/notifications.js` — `GET /`, `PATCH /read`, `PATCH /:id`
+- `client/src/services/notificationService.js` — list, markRead, markAllRead
+
+**Fichiers modifiés :**
+- `server/src/sse.js` — SSE par utilisateur (`addClient(userId, res)`, `broadcastToUser()`)
+- `server/src/app.js` — `addClient/removeClient` avec `req.user.id`
+- `server/src/db/init.js` — table `notifications` ajoutée
+- `server/src/controllers/taskController.js` — notification au owner lors d'un changement de statut
+- `client/src/components/Layout/TopBar.jsx` — composant `NotificationBell` + badge + dropdown
+
+---
+
+### 21. Statuts de tâches à 3 états (remplace la case à cocher)
+
+**Avant :** Case à cocher binaire todo ↔ done.
+
+**Après :** Bouton cycle rond à 3 états : `○ À faire` → `◑ En cours` → `● Terminé` → `○ À faire`. Le texte de la tâche passe en bleu/gras quand "En cours". Accessible dans ProjectModal et Mon Espace.
+
+**Comportement :**
+- `taskService.patchStatus()` appelle `PATCH /projects/:id/tasks/:taskId/status` — route accessible à tous les utilisateurs authentifiés (y compris les membres)
+- Les membres ne peuvent mettre à jour que le statut des tâches qui leur sont assignées
+- `handleCycleTask()` dans ProjectModal, `handleToggleDone()` cycle dans MonEspace
+
+**Fichiers modifiés :**
+- `server/src/routes/projects.js` — nouvelle route `PATCH /:id/tasks/:taskId/status`
+- `server/src/controllers/taskController.js` — fonction `updateStatus()`
+- `client/src/services/taskService.js` — méthode `patchStatus()`
+- `client/src/components/Project/ProjectModal.jsx` — cycle 3 états + couleur texte
+- `client/src/components/MonEspace/MonEspacePage.jsx` — cycle 3 états avec patchStatus
+
+---
+
+### 22. Validation des dates de tâches
+
+**Avant :** Aucune contrainte — une tâche pouvait avoir une date antérieure au projet ou à sa dépendance.
+
+**Après :**
+- La date de début d'une tâche ne peut pas être antérieure à la date de début du projet
+- Si une tâche dépend d'une autre, sa date de début ne peut pas être antérieure à la date de fin de la tâche précédente
+- Validation backend (HTTP 400 avec message explicite) + frontend (`min` sur les `<input type="date">` avec affichage de la date minimale en orange)
+
+**Fichiers modifiés :**
+- `server/src/controllers/taskController.js` — validations dans `create()` et `update()`
+- `client/src/components/Project/ProjectModal.jsx` — attribut `min` dynamique sur les champs dates (formulaire ajout + édition inline)
+
+---
+
+### 23. Flèches de dépendances dans le Calendrier Gantt
+
+**Avant :** Les liens de dépendances entre tâches n'étaient pas visibles dans le calendrier (seul l'icône ⛓ indiquait une dépendance).
+
+**Après :** Quand un projet est déplié dans le calendrier, des lignes orangées en pointillés (SVG) relient la fin de la barre de la tâche parente à la gauche de la barre de la tâche dépendante, sous forme de chemin orthogonal (L-shape).
+
+**Comportement :** Le composant `DependencyLines` calcule les positions x (en pourcentage 0-100 sur 12 mois) et y (index × 56px) de chaque paire de tâches liées, et les trace via `<path>` SVG avec `vectorEffect="non-scaling-stroke"` pour une épaisseur constante quel que soit le zoom.
+
+**Fichiers modifiés :**
+- `client/src/components/Calendar/CalendarPage.jsx` — composant `DependencyLines` + intégration dans `renderPoleSection`
+
+---
+
+## Lot 7 — Retours utilisateurs (session 7)
+
+### 24. Correction cloche de notifications — icône SVG
+
+**Avant :** Path SVG incomplet rendant la cloche illisible.
+
+**Après :** Icône cloche standard en deux `<path>` séparés (corps + anneau de bas).
+
+**Fichiers modifiés :**
+- `client/src/components/Layout/TopBar.jsx` — path SVG corrigé
+
+---
+
+### 25. Dépendances tâches dans le calendrier — numéros au lieu de flèches SVG
+
+**Avant :** Flèches pointillées SVG reliant les barres (composant `DependencyLines`).
+
+**Après :** Chaque tâche affiche un badge numéroté circulaire (#1, #2…) à gauche de son nom. Si une tâche dépend d'une autre, elle affiche `→ #N` (badge orange) indiquant le numéro de la tâche parente.
+
+**Fichiers modifiés :**
+- `client/src/components/Calendar/CalendarPage.jsx` — `TaskGanttRow` reçoit `taskNum` + `depNum`, `DependencyLines` supprimé, `renderPoleSection` calcule et passe les numéros
+
+---
+
+### 26. Suppression de l'indentation des tâches dépendantes dans ProjectModal
+
+**Avant :** Les tâches avec `depends_on` étaient décalées de `ml-4 border-l-2 border-l-orange-200`.
+
+**Après :** Toutes les tâches sont alignées au même niveau. La dépendance reste visible via le label `⛓ après «titre»`.
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — suppression du `ml-4 border-l-2 border-l-orange-200` conditionnel
+
+---
+
+## Lot 8 — Déploiement LXC Proxmox (session 8)
+
+### 27. Module de déploiement LXC — nginx + SSL auto-signé + PM2
+
+**Ajouté :** Dossier `deploy/` contenant tout le nécessaire pour installer l'application dans un conteneur LXC Proxmox sans Docker.
+
+**Architecture cible :**
+- nginx écoute sur :80 et :443
+- Toutes les requêtes HTTP (:80) sont redirigées 301 vers HTTPS (:443)
+- nginx proxifie vers Node.js (port 3000 local)
+- La route `/api/sse` bénéficie d'une configuration spéciale (buffering désactivé, timeout 24h)
+- Certificat SSL auto-signé valide 10 ans (usage LAN interne)
+- PM2 maintient le processus Node.js actif et le relance au boot via systemd
+
+**Fichiers créés :**
+- `deploy/setup.sh` — script d'installation complet (Node.js 20, PM2, nginx, cert SSL, build frontend, démarrage)
+- `deploy/nginx.conf` — configuration nginx (redirect :80→:443, reverse proxy, config SSE)
+- `deploy/ecosystem.config.cjs` — configuration PM2 (flag `--experimental-sqlite`, logs, politique de redémarrage)
+- `deploy/update.sh` — script de mise à jour (git pull + rebuild + redémarrage PM2)
+- `deploy/README.md` — guide d'installation Proxmox complet
+
+---
+
 ## Récapitulatif des fichiers touchés
 
 ### Backend (`server/src/`)
@@ -455,6 +603,16 @@ Le champ de recherche a été **supprimé**.
 | `services/flowService.js` | **Nouveau** — service API flux |
 | `store/flowStore.js` | **Nouveau** — état Zustand flux |
 | `components/Flows/` | **Nouveau** — 10 composants (FlowsPage, FlowEditor, NodePalette, NodeEditPanel, 6 nodes) |
+
+### Déploiement (`deploy/`)
+
+| Fichier | Nature |
+|---------|--------|
+| `deploy/setup.sh` | **Nouveau** — installation complète LXC (Node.js, PM2, nginx, SSL) |
+| `deploy/nginx.conf` | **Nouveau** — reverse proxy HTTPS + redirect :80→:443 + config SSE |
+| `deploy/ecosystem.config.cjs` | **Nouveau** — configuration PM2 production |
+| `deploy/update.sh` | **Nouveau** — mise à jour (git pull + rebuild + restart) |
+| `deploy/README.md` | **Nouveau** — guide d'installation Proxmox |
 
 ---
 

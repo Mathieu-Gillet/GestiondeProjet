@@ -93,9 +93,17 @@ export default function ProjectModal({ projectId, onClose }) {
     setNewTask({ title: '', duration_days: 1, start_date: '', due_date: '', depends_on: '', assigned_to: '' })
   }
 
-  async function handleToggleTask(task) {
-    const nextStatus = task.status === 'done' ? 'todo' : 'done'
-    const updated = await taskService.update(projectId, task.id, { status: nextStatus })
+  const TASK_STATUS_CYCLE = ['todo', 'in_progress', 'done']
+  const TASK_STATUS_CFG = {
+    todo:        { label: 'À faire',  icon: '○', cls: 'border-gray-300 hover:border-indigo-400 text-gray-300' },
+    in_progress: { label: 'En cours', icon: '◑', cls: 'border-blue-400 bg-blue-50 text-blue-500' },
+    done:        { label: 'Terminé',  icon: '●', cls: 'border-emerald-500 bg-emerald-50 text-emerald-600' },
+  }
+
+  async function handleCycleTask(task) {
+    const idx = TASK_STATUS_CYCLE.indexOf(task.status)
+    const nextStatus = TASK_STATUS_CYCLE[(idx + 1) % 3]
+    const updated = await taskService.patchStatus(projectId, task.id, nextStatus)
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
   }
 
@@ -466,7 +474,7 @@ export default function ProjectModal({ projectId, onClose }) {
                       task.status === 'done'
                         ? 'bg-white border-gray-100 opacity-60'
                         : 'bg-white border-gray-200'
-                    } ${task.depends_on ? 'ml-4 border-l-2 border-l-orange-200' : ''}`}
+                    }`}
                   >
                     {/* ── Mode édition inline ── */}
                     {editingTaskId === task.id ? (
@@ -488,22 +496,30 @@ export default function ProjectModal({ projectId, onClose }) {
                           />
                           <span className="text-[10px] text-gray-400">j</span>
                         </div>
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-[10px] text-gray-400 block mb-0.5">Début</label>
-                            <input type="date" value={editingTask.start_date}
-                              onChange={(e) => setEditingTask((p) => ({ ...p, start_date: e.target.value }))}
-                              className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-[10px] text-gray-400 block mb-0.5">Fin</label>
-                            <input type="date" value={editingTask.due_date}
-                              onChange={(e) => setEditingTask((p) => ({ ...p, due_date: e.target.value }))}
-                              className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            />
-                          </div>
-                        </div>
+                        {(() => {
+                          const depEditTask = editingTask.depends_on ? tasks.find((t) => t.id === Number(editingTask.depends_on)) : null
+                          const minEditStart = depEditTask?.due_date || project.start_date || ''
+                          return (
+                            <div className="flex gap-2">
+                              <div className="flex-1">
+                                <label className="text-[10px] text-gray-400 block mb-0.5">
+                                  Début{minEditStart && <span className="text-orange-400 ml-1">min {minEditStart}</span>}
+                                </label>
+                                <input type="date" value={editingTask.start_date} min={minEditStart}
+                                  onChange={(e) => setEditingTask((p) => ({ ...p, start_date: e.target.value }))}
+                                  className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-[10px] text-gray-400 block mb-0.5">Fin</label>
+                                <input type="date" value={editingTask.due_date} min={editingTask.start_date || minEditStart}
+                                  onChange={(e) => setEditingTask((p) => ({ ...p, due_date: e.target.value }))}
+                                  className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })()}
                         {tasks.length > 1 && (
                           <div>
                             <label className="text-[10px] text-gray-400 block mb-0.5">Dépend de :</label>
@@ -545,40 +561,23 @@ export default function ProjectModal({ projectId, onClose }) {
                       /* ── Vue normale ── */
                       <div className="px-3 py-2">
                         <div className="flex items-center gap-2.5">
-                          {/* Checkbox */}
-                          {canEdit ? (
-                            <button
-                              onClick={() => handleToggleTask(task)}
-                              className={`rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
-                                task.status === 'done'
-                                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                                  : 'border-gray-300 hover:border-indigo-400'
-                              }`}
-                              style={{ width: 18, height: 18 }}
-                            >
-                              {task.status === 'done' && (
-                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </button>
-                          ) : (
-                            <div
-                              className={`rounded border-2 flex-shrink-0 flex items-center justify-center ${
-                                task.status === 'done' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'
-                              }`}
-                              style={{ width: 18, height: 18 }}
-                            >
-                              {task.status === 'done' && (
-                                <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          )}
+                          {/* Bouton statut cycle 3 états */}
+                          {(() => {
+                            const cfg = TASK_STATUS_CFG[task.status] || TASK_STATUS_CFG.todo
+                            return (
+                              <button
+                                onClick={() => handleCycleTask(task)}
+                                title={`Statut : ${cfg.label} — cliquer pour changer`}
+                                className={`rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold transition-all ${cfg.cls}`}
+                                style={{ width: 20, height: 20, fontSize: 11 }}
+                              >
+                                {cfg.icon}
+                              </button>
+                            )
+                          })()}
 
                           <span className={`flex-1 text-xs leading-snug ${
-                            task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700'
+                            task.status === 'done' ? 'line-through text-gray-400' : task.status === 'in_progress' ? 'text-blue-700 font-medium' : 'text-gray-700'
                           }`}>
                             {task.title}
                           </span>
@@ -658,26 +657,33 @@ export default function ProjectModal({ projectId, onClose }) {
                       />
                       <span className="text-xs text-gray-400">j</span>
                     </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <label className="text-[10px] text-gray-400 block mb-0.5">Début</label>
-                        <input
-                          type="date"
-                          value={newTask.start_date}
-                          onChange={(e) => setNewTask((p) => ({ ...p, start_date: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-[10px] text-gray-400 block mb-0.5">Fin</label>
-                        <input
-                          type="date"
-                          value={newTask.due_date}
-                          onChange={(e) => setNewTask((p) => ({ ...p, due_date: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
+                    {(() => {
+                      const depTask = newTask.depends_on ? tasks.find((t) => t.id === Number(newTask.depends_on)) : null
+                      const minStart = depTask?.due_date || project.start_date || ''
+                      const minEnd   = newTask.start_date || minStart
+                      return (
+                        <div className="flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-[10px] text-gray-400 block mb-0.5">
+                              Début{minStart && <span className="text-orange-400 ml-1">min {minStart}</span>}
+                            </label>
+                            <input
+                              type="date" value={newTask.start_date} min={minStart}
+                              onChange={(e) => setNewTask((p) => ({ ...p, start_date: e.target.value }))}
+                              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[10px] text-gray-400 block mb-0.5">Fin</label>
+                            <input
+                              type="date" value={newTask.due_date} min={minEnd}
+                              onChange={(e) => setNewTask((p) => ({ ...p, due_date: e.target.value }))}
+                              className="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })()}
                     {tasks.length > 0 && (
                       <div>
                         <label className="text-[10px] text-gray-400 block mb-0.5">Dépend de (commence après) :</label>

@@ -23,7 +23,7 @@ app.get('/api/events', authenticate, (req, res) => {
   res.flushHeaders();
 
   res.write(':connected\n\n');
-  addClient(res);
+  addClient(req.user.id, res);
 
   const heartbeat = setInterval(() => {
     res.write(':heartbeat\n\n');
@@ -31,7 +31,7 @@ app.get('/api/events', authenticate, (req, res) => {
 
   req.on('close', () => {
     clearInterval(heartbeat);
-    removeClient(res);
+    removeClient(req.user.id, res);
   });
 });
 
@@ -40,7 +40,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/projects', require('./routes/projects'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/tags', require('./routes/tags'));
-app.use('/api/flows', require('./routes/flows'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // En production : servir le frontend React compilé
 if (process.env.NODE_ENV === 'production') {

@@ -177,10 +177,12 @@ export default function MonEspacePage() {
     }).catch(() => setLoadingTasks(false))
   }, [])
 
-  // Basculer done ↔ todo pour une tâche
+  // Cycle statut todo → in_progress → done → todo
+  const STATUS_CYCLE = ['todo', 'in_progress', 'done']
   async function handleToggleDone(task) {
-    const newStatus = task.status === 'done' ? 'todo' : 'done'
-    await taskService.update(task.project_id, task.id, { status: newStatus })
+    const idx = STATUS_CYCLE.indexOf(task.status)
+    const newStatus = STATUS_CYCLE[(idx + 1) % 3]
+    await taskService.patchStatus(task.project_id, task.id, newStatus)
     setTasks((prev) =>
       prev.map((t) => t.id === task.id ? { ...t, status: newStatus } : t)
     )

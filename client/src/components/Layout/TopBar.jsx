@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import useProjectStore from '../../store/projectStore'
 import ProjectForm from '../Project/ProjectForm'
+import { notificationService } from '../../services/notificationService'
 
 const POLE_FILTERS = [
   { value: 'all',     label: 'Tous' },
@@ -42,16 +43,6 @@ const NAV_ITEMS = [
     ),
   },
   {
-    path: '/flows',
-    label: 'Flux métiers',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-          d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    ),
-  },
-  {
     path: '/mon-espace',
     label: 'Mon espace',
     icon: (
@@ -62,6 +53,107 @@ const NAV_ITEMS = [
     ),
   },
 ]
+
+function NotificationBell() {
+  const [notifs, setNotifs] = useState([])
+  const [open, setOpen]     = useState(false)
+  const dropRef             = useRef(null)
+
+  const unread = notifs.filter((n) => !n.read).length
+
+  useEffect(() => {
+    notificationService.list().then(setNotifs).catch(() => {})
+  }, [])
+
+  // Écoute SSE pour les nouvelles notifications
+  useEffect(() => {
+    const store = useProjectStore.getState()
+    const es = store._sseSource
+    if (!es) return
+    function onNotif(e) {
+      const data = JSON.parse(e.data || '{}')
+      setNotifs((prev) => [{ ...data, read: 0, created_at: new Date().toISOString() }, ...prev])
+    }
+    es.addEventListener('notification', onNotif)
+    return () => es.removeEventListener('notification', onNotif)
+  }, [])
+
+  // Fermer le dropdown au clic dehors
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  async function handleOpen() {
+    setOpen((v) => !v)
+    if (!open && unread > 0) {
+      await notificationService.markAllRead().catch(() => {})
+      setNotifs((prev) => prev.map((n) => ({ ...n, read: 1 })))
+    }
+  }
+
+  return (
+    <div className="relative" ref={dropRef}>
+      <button
+        onClick={handleOpen}
+        title="Notifications"
+        className="relative p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+            {unread > 9 ? '9+' : unread}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-10 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-800">Notifications</h3>
+            {notifs.length > 0 && (
+              <button
+                onClick={async () => {
+                  await notificationService.markAllRead().catch(() => {})
+                  setNotifs((p) => p.map((n) => ({ ...n, read: 1 })))
+                }}
+                className="text-[10px] text-gray-400 hover:text-indigo-600"
+              >
+                Tout marquer lu
+              </button>
+            )}
+          </div>
+          <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+            {notifs.length === 0 ? (
+              <p className="text-sm text-gray-400 italic text-center py-8">Aucune notification</p>
+            ) : (
+              notifs.slice(0, 20).map((n) => (
+                <div
+                  key={n.id}
+                  className={`px-4 py-3 text-xs ${n.read ? 'text-gray-500' : 'bg-indigo-50 text-gray-700 font-medium'}`}
+                >
+                  <p className="leading-snug">{n.message}</p>
+                  <p className="text-gray-400 mt-0.5 font-normal">
+                    {new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function TopBar() {
   const location  = useLocation()
@@ -179,6 +271,9 @@ export default function TopBar() {
             Nouveau projet
           </button>
         )}
+
+        {/* Cloche notifications */}
+        <NotificationBell />
 
         {/* Utilisateur + déconnexion */}
         <div className="flex items-center gap-2 pl-3 border-l border-gray-700">

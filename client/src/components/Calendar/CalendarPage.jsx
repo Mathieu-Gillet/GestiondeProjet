@@ -96,8 +96,10 @@ function MonthHeaderCell({ monthIndex, isCurrentMonth }) {
 }
 
 // ─── Ligne tâche — sous-barre Gantt ──────────────────────────────────────────
+// taskNum    : numéro de cette tâche (1-based) dans la liste du projet
+// depNum     : numéro de la tâche parente (ou null)
 
-function TaskGanttRow({ task, year }) {
+function TaskGanttRow({ task, year, taskNum, depNum }) {
   const span = getTaskSpan(task, year)
   if (!span) return null
 
@@ -115,19 +117,29 @@ function TaskGanttRow({ task, year }) {
 
   return (
     <div className="flex items-center min-h-14 border-b border-gray-100 last:border-0 bg-indigo-50/20">
-      {/* Label gauche indenté */}
-      <div className="w-56 flex-shrink-0 flex items-center gap-2 px-3 py-2 overflow-hidden" style={{ paddingLeft: '2rem' }}>
-        <div
-          className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ backgroundColor: statusColor }}
-        />
+      {/* Label gauche */}
+      <div className="w-56 flex-shrink-0 flex items-center gap-1.5 pl-3 pr-2 py-2 overflow-hidden">
+        {/* Numéro de la tâche */}
+        <span
+          className="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
+          style={{ backgroundColor: statusColor + '22', color: statusColor }}
+          title={`Tâche n°${taskNum}`}
+        >
+          {taskNum}
+        </span>
+
         <span className="text-xs text-gray-600 truncate flex-1">{task.title}</span>
-        {task.depends_on_title && (
+
+        {/* Référence à la tâche parente */}
+        {depNum !== null && (
           <span
-            className="text-[10px] text-orange-400 flex-shrink-0"
-            title={`Dépend de : ${task.depends_on_title}`}
-          >⛓</span>
+            className="flex-shrink-0 text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-600 whitespace-nowrap"
+            title={`Commence après la tâche n°${depNum} : ${task.depends_on_title}`}
+          >
+            → #{depNum}
+          </span>
         )}
+
         <span className="text-[10px] text-gray-400 flex-shrink-0 bg-gray-100 px-1 rounded">{task.duration_days}j</span>
       </div>
 
@@ -142,7 +154,6 @@ function TaskGanttRow({ task, year }) {
             opacity: task.status === 'done' ? 0.4 : 0.75,
           }}
         >
-          {/* Label titre dans la barre si assez large */}
           <span className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
             <span className="text-[10px] text-white font-medium truncate">{task.title}</span>
           </span>
@@ -691,7 +702,7 @@ export default function CalendarPage() {
 
               {/* Sous-lignes tâches */}
               {isExpanded && (
-                <div className="border-l-2 border-indigo-200 ml-4">
+                <div className="border-l-2 border-indigo-200 ml-4 relative">
                   {loadingTasks && tasks.length === 0 ? (
                     <div className="flex items-center min-h-8 bg-indigo-50/20 px-8">
                       <span className="text-[10px] text-gray-400 italic">Chargement des tâches…</span>
@@ -699,9 +710,20 @@ export default function CalendarPage() {
                   ) : tasksWithDates.length === 0 ? (
                     <TasksEmptyRow tasks={tasks} />
                   ) : (
-                    tasksWithDates.map((task) => (
-                      <TaskGanttRow key={task.id} task={task} year={year} />
-                    ))
+                    <>
+                      {tasksWithDates.map((task, i) => {
+                        const taskNum = i + 1
+                        const depNum  = task.depends_on
+                          ? (() => {
+                              const idx = tasksWithDates.findIndex((t) => t.id === task.depends_on)
+                              return idx >= 0 ? idx + 1 : null
+                            })()
+                          : null
+                        return (
+                          <TaskGanttRow key={task.id} task={task} year={year} taskNum={taskNum} depNum={depNum} />
+                        )
+                      })}
+                    </>
                   )}
                   {/* Légende statuts tâches */}
                   {tasksWithDates.length > 0 && (
