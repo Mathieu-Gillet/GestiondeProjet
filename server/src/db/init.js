@@ -117,6 +117,7 @@ const taskMigrations = [
   'ALTER TABLE tasks ADD COLUMN depends_on INTEGER REFERENCES tasks(id) ON DELETE SET NULL',
   'ALTER TABLE tasks ADD COLUMN assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL',
   'ALTER TABLE tasks ADD COLUMN notes TEXT',
+  'ALTER TABLE comments ADD COLUMN task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE',
 ];
 for (const sql of taskMigrations) {
   try { db.exec(sql); } catch (_) { /* colonne déjà présente */ }

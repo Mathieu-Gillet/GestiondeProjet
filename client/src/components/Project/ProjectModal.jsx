@@ -17,8 +17,9 @@ export default function ProjectModal({ projectId, onClose }) {
   const [newTask, setNewTask]       = useState({ title: '', duration_days: 1, start_date: '', due_date: '', depends_on: '', assigned_to: '' })
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [editingTask, setEditingTask]     = useState({})
-  const [expandedNotesId, setExpandedNotesId] = useState(null)
-  const [notesMap, setNotesMap]           = useState({})
+  const [expandedDiscussionId, setExpandedDiscussionId] = useState(null)
+  const [taskCommentsMap, setTaskCommentsMap]           = useState({})
+  const [newTaskCommentMap, setNewTaskCommentMap]       = useState({})
   const [activeTab, setActiveTab]   = useState('comments')
   const [showEdit, setShowEdit]     = useState(false)
   const [loading, setLoading]       = useState(true)
@@ -109,20 +110,30 @@ export default function ProjectModal({ projectId, onClose }) {
     setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
   }
 
-  function handleToggleNotes(task) {
-    if (expandedNotesId === task.id) {
-      setExpandedNotesId(null)
-    } else {
-      setExpandedNotesId(task.id)
-      setNotesMap((prev) => ({ ...prev, [task.id]: prev[task.id] ?? (task.notes || '') }))
+  async function handleToggleDiscussion(task) {
+    if (expandedDiscussionId === task.id) {
+      setExpandedDiscussionId(null)
+      return
+    }
+    setExpandedDiscussionId(task.id)
+    if (!taskCommentsMap[task.id]) {
+      const comments = await taskService.listComments(projectId, task.id)
+      setTaskCommentsMap((prev) => ({ ...prev, [task.id]: comments }))
     }
   }
 
-  async function handleBlurNotes(task) {
-    const current = notesMap[task.id] ?? ''
-    if (current === (task.notes || '')) return
-    const updated = await taskService.patchNotes(projectId, task.id, current || null)
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? updated : t)))
+  async function handleAddTaskComment(e, taskId) {
+    e.preventDefault()
+    const content = (newTaskCommentMap[taskId] || '').trim()
+    if (!content) return
+    const comment = await taskService.addComment(projectId, taskId, content)
+    setTaskCommentsMap((prev) => ({ ...prev, [taskId]: [...(prev[taskId] || []), comment] }))
+    setNewTaskCommentMap((prev) => ({ ...prev, [taskId]: '' }))
+  }
+
+  async function handleDeleteTaskComment(taskId, commentId) {
+    await taskService.deleteComment(projectId, taskId, commentId)
+    setTaskCommentsMap((prev) => ({ ...prev, [taskId]: prev[taskId].filter((c) => c.id !== commentId) }))
   }
 
   async function handleDeleteTask(taskId) {
@@ -211,7 +222,7 @@ export default function ProjectModal({ projectId, onClose }) {
         {/* Fenêtre large — 90 vw, max 1200px, 85 vh */}
         <div
           className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          style={{ width: '90vw', maxWidth: '1200px', height: '85vh' }}
+          style={{ width: '94vw', maxWidth: '1400px', height: '90vh' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
@@ -256,7 +267,7 @@ export default function ProjectModal({ projectId, onClose }) {
           <div className="flex flex-1 min-h-0">
 
             {/* ── Panneau gauche : détails + onglets ── */}
-            <div className="w-72 flex-shrink-0 flex flex-col border-r border-gray-200 overflow-hidden">
+            <div className="flex-1 min-w-0 flex flex-col border-r border-gray-200 overflow-hidden">
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
                 {project.description && (
@@ -577,7 +588,7 @@ export default function ProjectModal({ projectId, onClose }) {
                       </form>
                     ) : (
                       /* ── Vue normale ── */
-                      <div className="px-3 py-2">
+                      <div className="px-3 py-2.5">
                         <div className="flex items-center gap-2.5">
                           {/* Bouton statut cycle 3 états */}
                           {(() => {
@@ -586,15 +597,15 @@ export default function ProjectModal({ projectId, onClose }) {
                               <button
                                 onClick={() => handleCycleTask(task)}
                                 title={`Statut : ${cfg.label} — cliquer pour changer`}
-                                className={`rounded-full border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold transition-all ${cfg.cls}`}
-                                style={{ width: 20, height: 20, fontSize: 11 }}
+                                className={`rounded-full border-2 flex-shrink-0 flex items-center justify-center font-bold transition-all ${cfg.cls}`}
+                                style={{ width: 24, height: 24, fontSize: 13 }}
                               >
                                 {cfg.icon}
                               </button>
                             )
                           })()}
 
-                          <span className={`flex-1 text-xs leading-snug ${
+                          <span className={`flex-1 text-sm leading-snug ${
                             task.status === 'done' ? 'line-through text-gray-400' : task.status === 'in_progress' ? 'text-blue-700 font-medium' : 'text-gray-700'
                           }`}>
                             {task.title}
@@ -611,7 +622,7 @@ export default function ProjectModal({ projectId, onClose }) {
                                 className="text-gray-300 hover:text-indigo-500 flex-shrink-0"
                                 title="Modifier la tâche"
                               >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                     d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
                                   />
@@ -619,7 +630,8 @@ export default function ProjectModal({ projectId, onClose }) {
                               </button>
                               <button
                                 onClick={() => handleDeleteTask(task.id)}
-                                className="text-gray-300 hover:text-red-400 flex-shrink-0 text-xs"
+                                className="text-gray-300 hover:text-red-400 flex-shrink-0 text-base leading-none"
+                                title="Supprimer la tâche"
                               >✕</button>
                             </>
                           )}
@@ -627,55 +639,94 @@ export default function ProjectModal({ projectId, onClose }) {
 
                         {/* Dates, dépendance et assignee */}
                         {(task.start_date || task.due_date || task.depends_on_title || task.assigned_to_username) && (
-                          <div className="mt-1 pl-6 flex flex-wrap gap-x-3 gap-y-0.5">
+                          <div className="mt-1.5 pl-7 flex flex-wrap gap-x-3 gap-y-0.5">
                             {(task.start_date || task.due_date) && (
-                              <span className="text-[10px] text-gray-400">
+                              <span className="text-xs text-gray-400">
                                 {task.start_date && formatDate(task.start_date)}
                                 {task.start_date && task.due_date && ' → '}
                                 {task.due_date && formatDate(task.due_date)}
                               </span>
                             )}
                             {task.depends_on_title && (
-                              <span className="text-[10px] text-orange-500" title="Dépendance">
+                              <span className="text-xs text-orange-500" title="Dépendance">
                                 ⛓ après «{task.depends_on_title}»
                               </span>
                             )}
                             {task.assigned_to_username && (
-                              <span className="text-[10px] text-indigo-500 flex items-center gap-0.5">
+                              <span className="text-xs text-indigo-500 flex items-center gap-1">
                                 <span>👤</span> {task.assigned_to_username}
                               </span>
                             )}
                           </div>
                         )}
 
-                        {/* Bouton notes + textarea expandable */}
-                        <div className="mt-1 pl-6">
+                        {/* Discussion par tâche */}
+                        <div className="mt-2 pl-7">
                           <button
-                            onClick={() => handleToggleNotes(task)}
-                            className={`text-[10px] flex items-center gap-1 transition-colors ${
-                              expandedNotesId === task.id
+                            onClick={() => handleToggleDiscussion(task)}
+                            className={`text-xs flex items-center gap-1.5 transition-colors ${
+                              expandedDiscussionId === task.id
                                 ? 'text-indigo-600 font-medium'
-                                : task.notes
-                                ? 'text-amber-600 font-medium'
+                                : taskCommentsMap[task.id]?.length > 0
+                                ? 'text-indigo-500 font-medium'
                                 : 'text-gray-400 hover:text-gray-600'
                             }`}
                           >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
-                            {task.notes ? 'Notes (cliquer pour modifier)' : 'Ajouter des notes'}
+                            {taskCommentsMap[task.id]?.length > 0
+                              ? `Discussion (${taskCommentsMap[task.id].length})`
+                              : 'Discussion'}
                           </button>
-                          {expandedNotesId === task.id && (
-                            <textarea
-                              className="mt-1.5 w-full border border-indigo-200 rounded-lg px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none bg-white"
-                              rows={4}
-                              placeholder="Notes, avancement, points de blocage..."
-                              value={notesMap[task.id] ?? ''}
-                              onChange={(e) => setNotesMap((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                              onBlur={() => handleBlurNotes(task)}
-                              autoFocus
-                            />
+
+                          {expandedDiscussionId === task.id && (
+                            <div className="mt-1.5 border border-indigo-100 rounded-lg bg-white overflow-hidden">
+                              {/* Messages */}
+                              <div className="max-h-44 overflow-y-auto px-3 py-2 space-y-2">
+                                {!taskCommentsMap[task.id] ? (
+                                  <p className="text-xs text-gray-400 italic">Chargement…</p>
+                                ) : taskCommentsMap[task.id].length === 0 ? (
+                                  <p className="text-xs text-gray-400 italic">Pas encore de messages</p>
+                                ) : (
+                                  taskCommentsMap[task.id].map((c) => (
+                                    <div key={c.id} className="flex items-start gap-1.5 group">
+                                      <div className="w-6 h-6 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-bold text-indigo-600 flex-shrink-0">
+                                        {c.username?.[0]?.toUpperCase() || '?'}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <span className="text-xs font-semibold text-gray-600">{c.username}</span>
+                                        <p className="text-sm text-gray-700 break-words">{c.content}</p>
+                                      </div>
+                                      {(c.author_id === user?.id || user?.role === 'admin') && (
+                                        <button
+                                          onClick={() => handleDeleteTaskComment(task.id, c.id)}
+                                          className="text-gray-300 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100 flex-shrink-0 mt-1"
+                                        >✕</button>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                              {/* Saisie */}
+                              <form
+                                onSubmit={(e) => handleAddTaskComment(e, task.id)}
+                                className="border-t border-gray-100 px-2 py-1.5 flex gap-1.5"
+                              >
+                                <input
+                                  type="text"
+                                  value={newTaskCommentMap[task.id] || ''}
+                                  onChange={(e) => setNewTaskCommentMap((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                                  placeholder="Écrire un message…"
+                                  className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                />
+                                <button
+                                  type="submit"
+                                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded transition-colors"
+                                >Envoyer</button>
+                              </form>
+                            </div>
                           )}
                         </div>
                       </div>

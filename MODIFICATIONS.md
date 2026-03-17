@@ -673,6 +673,48 @@ Le champ de recherche a été **supprimé**.
 
 ---
 
+## Lot 10 — Discussion par tâche + UI améliorée (session 10)
+
+### 31. Remplacement des notes par une discussion par tâche
+
+**Avant :** Chaque tâche avait un textarea "notes" sauvegardé au blur (texte personnel, non structuré).
+
+**Après :** Chaque tâche dispose d'un espace discussion collapsible (clic sur "Discussion"). Les membres du projet peuvent y échanger des messages courts, visibles de tous. Le compteur de messages apparaît dans le bouton quand la discussion est non vide. Suppression possible par l'auteur ou un admin.
+
+**Comportement :**
+- Chargement lazy des commentaires à la première ouverture
+- `POST /api/projects/:id/tasks/:taskId/comments` — tout utilisateur authentifié
+- `GET /api/projects/:id/tasks/:taskId/comments` — tout utilisateur authentifié
+- `DELETE /api/projects/:id/tasks/:taskId/comments/:commentId` — auteur ou admin
+- Les commentaires projet existants (`GET /api/projects/:id/comments`) filtrent désormais `task_id IS NULL`
+
+**Fichiers modifiés :**
+- `server/src/db/init.js` — migration `ALTER TABLE comments ADD COLUMN task_id`
+- `server/src/controllers/projectController.js` — `getComments` filtre `task_id IS NULL`, nouvelles fonctions `getTaskComments` + `addTaskComment`
+- `server/src/routes/projects.js` — 3 nouvelles routes task comments
+- `client/src/services/taskService.js` — méthodes `listComments`, `addComment`, `deleteComment`
+- `client/src/components/Project/ProjectModal.jsx` — état `expandedDiscussionId` + `taskCommentsMap` + `newTaskCommentMap`, handlers discussion, UI discussion inline
+
+### 32. Agrandissement des textes et icônes dans le panneau tâches
+
+**Avant :** Titre de tâche en `text-xs`, métadonnées en `text-[10px]`, icône édition `w-3.5 h-3.5`, croix suppression `text-xs`, bouton statut 20×20 px.
+
+**Après :** Titre `text-sm`, métadonnées `text-xs`, icône édition `w-5 h-5`, croix `text-base`, bouton statut 24×24 px.
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — classes CSS taille texte et icônes
+
+### 33. Modal projet : taille et répartition 50/50
+
+**Avant :** Modal `90vw / 1200px / 85vh`, panneau gauche `w-72` fixe.
+
+**Après :** Modal `94vw / 1400px / 90vh`, panneau gauche `flex-1` → vrai 50/50 avec panneau droit.
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — style modal + classe panneau gauche
+
+---
+
 ## Commandes après mise à jour
 
 ```bash

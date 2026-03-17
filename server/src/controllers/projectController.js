@@ -248,14 +248,14 @@ function move(req, res) {
   res.json(moved);
 }
 
-// Commentaires
+// Commentaires projet (task_id IS NULL)
 function getComments(req, res) {
   const db = getDb();
   const comments = db.prepare(`
     SELECT c.*, u.username, u.role
     FROM comments c
     LEFT JOIN users u ON u.id = c.author_id
-    WHERE c.project_id = ?
+    WHERE c.project_id = ? AND c.task_id IS NULL
     ORDER BY c.created_at ASC
   `).all(req.params.id);
   res.json(comments);
@@ -290,13 +290,47 @@ function deleteComment(req, res) {
   const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.commentId);
   if (!comment) return res.status(404).json({ error: 'Commentaire introuvable' });
 
-  // Seul l'auteur ou un admin peut supprimer
   if (comment.author_id !== req.user.id && req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Vous ne pouvez supprimer que vos propres commentaires' });
   }
 
   db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.commentId);
   res.json({ message: 'Commentaire supprimé' });
+}
+
+// Commentaires de tâche
+function getTaskComments(req, res) {
+  const db = getDb();
+  const comments = db.prepare(`
+    SELECT c.*, u.username, u.role
+    FROM comments c
+    LEFT JOIN users u ON u.id = c.author_id
+    WHERE c.project_id = ? AND c.task_id = ?
+    ORDER BY c.created_at ASC
+  `).all(req.params.id, req.params.taskId);
+  res.json(comments);
+}
+
+function addTaskComment(req, res) {
+  const { content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Le commentaire ne peut pas être vide' });
+  }
+
+  const db = getDb();
+  const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Projet introuvable' });
+
+  const info = db.prepare(`
+    INSERT INTO comments (project_id, task_id, author_id, content) VALUES (?, ?, ?, ?)
+  `).run(req.params.id, req.params.taskId, req.user.id, content.trim());
+
+  const comment = db.prepare(`
+    SELECT c.*, u.username, u.role FROM comments c
+    LEFT JOIN users u ON u.id = c.author_id WHERE c.id = ?
+  `).get(info.lastInsertRowid);
+
+  res.status(201).json(comment);
 }
 
 function getActivity(req, res) {
@@ -311,4 +345,4 @@ function getActivity(req, res) {
   res.json(logs);
 }
 
-module.exports = { list, getOne, create, update, remove, move, getComments, addComment, deleteComment, getActivity };
+module.exports = { list, getOne, create, update, remove, move, getComments, addComment, deleteComment, getTaskComments, addTaskComment, getActivity };

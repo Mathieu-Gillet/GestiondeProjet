@@ -13,4 +13,10 @@ export const taskService = {
     api.patch(`/projects/${projectId}/tasks/${taskId}/notes`, { notes }).then((r) => r.data),
   remove: (projectId, taskId) =>
     api.delete(`/projects/${projectId}/tasks/${taskId}`).then((r) => r.data),
+  listComments: (projectId, taskId) =>
+    api.get(`/projects/${projectId}/tasks/${taskId}/comments`).then((r) => r.data),
+  addComment: (projectId, taskId, content) =>
+    api.post(`/projects/${projectId}/tasks/${taskId}/comments`, { content }).then((r) => r.data),
+  deleteComment: (projectId, taskId, commentId) =>
+    api.delete(`/projects/${projectId}/tasks/${taskId}/comments/${commentId}`).then((r) => r.data),
 }

@@ -26,8 +26,13 @@ router.patch('/:id/tasks/:taskId/status', authenticate, taskCtrl.updateStatus);
 // Mise à jour des notes : tous les utilisateurs (membres pour leurs tâches)
 router.patch('/:id/tasks/:taskId/notes',  authenticate, taskCtrl.patchNotes);
 
-// Commentaires : tous les utilisateurs
+// Commentaires projet : tous les utilisateurs
 router.post('/:id/comments', authenticate, ctrl.addComment);
 router.delete('/:id/comments/:commentId', authenticate, ctrl.deleteComment);
+
+// Commentaires de tâche : tous les utilisateurs
+router.get('/:id/tasks/:taskId/comments', authenticate, ctrl.getTaskComments);
+router.post('/:id/tasks/:taskId/comments', authenticate, ctrl.addTaskComment);
+router.delete('/:id/tasks/:taskId/comments/:commentId', authenticate, ctrl.deleteComment);
 
 module.exports = router;
