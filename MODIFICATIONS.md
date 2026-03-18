@@ -591,8 +591,9 @@ Le champ de recherche a été **supprimé**.
 | `services/taskService.js` | **Nouveau** — service API tâches |
 | `store/projectStore.js` | Actions `initSSE`, `closeSSE`, état `_sseSource` |
 | `components/Layout/AppShell.jsx` | Initialisation SSE |
-| `components/Calendar/CalendarPage.jsx` | Barre Gantt, drag `'move'`, bande contrainte, bouton Tâches pill, suivi au drag, clic titre, hauteur tâches |
-| `components/Project/ProjectModal.jsx` | Layout double panneau, tâches, édition inline, indentation dépendances, assignee |
+| `components/Calendar/CalendarPage.jsx` | Barre Gantt, drag `'move'`, bande contrainte, bouton Tâches pill, suivi au drag, clic titre, hauteur tâches, vue 6 mois, clampage |
+| `components/Project/ProjectModal.jsx` | Layout double panneau, tâches, édition inline, indentation dépendances, assignee, ConfirmModal, archive, sous-onglets statut, contraintes tâches |
+| `components/ConfirmModal.jsx` | **Nouveau** — modale de confirmation réutilisable |
 | `components/Project/ProjectForm.jsx` | Layout élargi, tâches initiales à la création |
 | `components/Board/Board.jsx` | Sélecteur d'années, vue archive/planifié |
 | `components/Admin/AdminTagsPage.jsx` | **Nouveau** — page gestion des tags |
@@ -712,6 +713,95 @@ Le champ de recherche a été **supprimé**.
 
 **Fichiers modifiés :**
 - `client/src/components/Project/ProjectModal.jsx` — style modal + classe panneau gauche
+
+---
+
+## Lot 11 — Contraintes tâches + Archive + ConfirmModal + Calendrier 6 mois + Mon espace accordéon (session 11)
+
+### 34. Contraintes temporelles sur les tâches (au plus tôt / au plus tard)
+
+**Avant :** Les tâches n'avaient pas de dates de contrainte (uniquement `start_date` et `due_date`).
+
+**Après :** Deux nouvelles colonnes `earliest_start DATE` et `latest_end DATE` sur la table `tasks`. Affichage dans la fiche projet (ligne ⏰/⏳ sous les dates) et saisie dans le formulaire d'édition inline.
+
+**Fichiers modifiés :**
+- `server/src/db/init.js` — 2 migrations `ALTER TABLE tasks ADD COLUMN earliest_start DATE` et `latest_end DATE`
+- `server/src/controllers/taskController.js` — champs dans le schema Zod, INSERT, UPDATE
+- `client/src/components/Project/ProjectModal.jsx` — champs de saisie dans le formulaire d'édition, affichage dans la vue normale
+
+---
+
+### 35. Protection archive — projets avec statut `done` non modifiables (sauf admin)
+
+**Avant :** Tout lead pouvait modifier/supprimer/déplacer un projet archivé (`done`) ainsi que ses tâches.
+
+**Après :** Quand le statut d'un projet est `done` et que l'utilisateur n'est pas admin, toute tentative de modification retourne HTTP 403 avec le message "Ce projet est archivé. Seul un administrateur peut le modifier." Le frontend affiche un badge "Lecture seule" à la place des boutons Modifier/Supprimer.
+
+**Comportement :**
+- Protection dans `projectController.js` : fonctions `update()`, `remove()`, `move()`
+- Protection dans `taskController.js` : fonctions `create()`, `update()`, `remove()`
+- `canEdit` recalculé dans `ProjectModal` : `false` si projet archivé et rôle ≠ admin
+
+**Fichiers modifiés :**
+- `server/src/controllers/projectController.js` — vérification `status === 'done'` dans update/remove/move
+- `server/src/controllers/taskController.js` — vérification `status === 'done'` dans create/update/remove
+- `client/src/components/Project/ProjectModal.jsx` — `isArchived`, `canEdit` mis à jour, badge "Lecture seule"
+
+---
+
+### 36. ConfirmModal — remplacement des `window.confirm()` natifs
+
+**Avant :** `handleDelete` et `handleDeleteTask` utilisaient `window.confirm()` (boîte de dialogue native du navigateur, sans style).
+
+**Après :** Nouveau composant `ConfirmModal` avec icône d'avertissement, titre, message et boutons "Annuler" / action colorée. Déclenché via état `confirmAction` (null ou `{ title, message, onConfirm }`).
+
+**Fichiers créés :**
+- `client/src/components/ConfirmModal.jsx` — modale de confirmation réutilisable
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — import `ConfirmModal`, état `confirmAction`, handlers `handleDelete` et `handleDeleteTask` réécrit, rendu conditionnel en fin de `return`
+
+---
+
+### 37. Panneau tâches — sous-onglets de statut + numérotation
+
+**Avant :** Toutes les tâches étaient listées dans un flux continu dans le panneau droit.
+
+**Après :** Trois onglets (À faire / En cours / Terminé) avec compteurs. Seules les tâches du statut actif sont affichées. Chaque tâche affiche un badge numéroté circulaire basé sur sa position dans la liste complète.
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectModal.jsx` — état `activeTaskTab`, sous-onglets, filtre par statut, numéro de tâche
+
+---
+
+### 38. Calendrier — vue 6 mois + clampage sur la plage visible
+
+**Avant :** Le calendrier affichait toujours les 12 mois de l'année. Les barres sortaient de leur plage visible.
+
+**Après :** Boutons de sélection 12 mois / 6 mois (Jan–Juin / Juil–Déc). Les barres de projets et tâches sont clampées à la plage visible. La ligne "aujourd'hui" est masquée hors plage. Les projets/tâches hors plage ne sont pas rendus.
+
+**Comportement :**
+- Variables `firstVisibleMonth`, `lastVisibleMonth`, `numVisibleMonths` dérivées de `calViewMonths` et `calHalf`
+- `ProjectRow` et `TaskGanttRow` reçoivent `firstVisibleMonth`/`numVisibleMonths` et calculent positions clampées
+- `todayPct` recalculé en tenant compte de la plage visible
+- En mode 6 mois : affichage de repères jours (1, 8, 15, 22, 29) sous les en-têtes de mois
+- Drag pointer corrigé pour utiliser `numVisibleMonths` dans le calcul de `newMonth`
+- `updateProject` appelé en premier dans `handlePointerUp` (type `'move'`) ; les tâches sont mises à jour ensuite en best-effort (try/catch)
+- Couleurs des tâches dans le Gantt changées : todo = amber `#F59E0B`, in_progress = orange `#F97316`, done = emerald `#10B981`
+
+**Fichiers modifiés :**
+- `client/src/components/Calendar/CalendarPage.jsx` — états `calViewMonths`/`calHalf`, toolbar, `ProjectRow`, `TaskGanttRow`, `todayPct`, `handlePointerMove`, `handlePointerUp`
+
+---
+
+### 39. Mon espace — refonte en accordéon projets + discussion tâches
+
+**Avant :** Deux colonnes séparées "Mes projets" (cartes) et "Mes tâches" (liste).
+
+**Après :** Liste accordéon unique : chaque projet se déplie pour afficher ses tâches assignées. Chaque tâche inclut un bouton de cycle de statut, son numéro, son titre, sa date et un module de discussion collapsible (identique à ProjectModal).
+
+**Fichiers modifiés :**
+- `client/src/components/MonEspace/MonEspacePage.jsx` — réécriture complète (composants `TaskDiscussion`, `TaskItem`, `ProjectAccordion`)
 
 ---
 

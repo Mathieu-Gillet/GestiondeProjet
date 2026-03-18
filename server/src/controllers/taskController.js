@@ -5,14 +5,16 @@ const { broadcast, broadcastToUser } = require('../sse');
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
 
 const taskSchema = z.object({
-  title:         z.string().min(1).max(200),
-  duration_days: z.number().int().min(0).default(1),
-  status:        z.enum(['todo', 'in_progress', 'done']).optional().default('todo'),
-  start_date:    dateStr,
-  due_date:      dateStr,
-  depends_on:    z.number().int().nullable().optional(),
-  assigned_to:   z.number().int().nullable().optional(),
-  notes:         z.string().nullable().optional(),
+  title:          z.string().min(1).max(200),
+  duration_days:  z.number().int().min(0).default(1),
+  status:         z.enum(['todo', 'in_progress', 'done']).optional().default('todo'),
+  start_date:     dateStr,
+  due_date:       dateStr,
+  depends_on:     z.number().int().nullable().optional(),
+  assigned_to:    z.number().int().nullable().optional(),
+  notes:          z.string().nullable().optional(),
+  earliest_start: dateStr,
+  latest_end:     dateStr,
 });
 
 const STATUS_LABELS = { todo: 'À faire', in_progress: 'En cours', done: 'Terminé' };
@@ -64,7 +66,11 @@ function create(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, notes } = result.data;
+  if (project.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  }
+
+  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, notes, earliest_start, latest_end } = result.data;
 
   // Validation : start_date >= project.start_date
   if (start_date && project.start_date && start_date < project.start_date) {
@@ -87,10 +93,11 @@ function create(req, res) {
   const position = (maxPos.m ?? -1) + 1;
 
   const info = db.prepare(`
-    INSERT INTO tasks (project_id, title, duration_days, status, position, start_date, due_date, depends_on, assigned_to, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (project_id, title, duration_days, status, position, start_date, due_date, depends_on, assigned_to, notes, earliest_start, latest_end)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(req.params.id, title, duration_days, status, position,
-      start_date ?? null, due_date ?? null, depends_on ?? null, assigned_to ?? null, notes ?? null);
+      start_date ?? null, due_date ?? null, depends_on ?? null, assigned_to ?? null, notes ?? null,
+      earliest_start ?? null, latest_end ?? null);
 
   const task = fetchTask(db, info.lastInsertRowid);
   broadcast('tasks_updated', { project_id: Number(req.params.id) });
@@ -107,7 +114,12 @@ function update(req, res) {
     .get(req.params.taskId, req.params.id);
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
-  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to } = result.data;
+  const projectForArchive = db.prepare('SELECT status FROM projects WHERE id = ?').get(req.params.id);
+  if (projectForArchive?.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  }
+
+  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, earliest_start, latest_end } = result.data;
 
   // Validation dates
   if (start_date || due_date) {
@@ -141,7 +153,9 @@ function update(req, res) {
   if (due_date      !== undefined) { changes.push('due_date = ?');      params.push(due_date ?? null); }
   if (depends_on    !== undefined) { changes.push('depends_on = ?');    params.push(depends_on ?? null); }
   if (assigned_to   !== undefined) { changes.push('assigned_to = ?');   params.push(assigned_to ?? null); }
-  if (notes         !== undefined) { changes.push('notes = ?');         params.push(notes ?? null); }
+  if (notes          !== undefined) { changes.push('notes = ?');          params.push(notes ?? null); }
+  if (earliest_start !== undefined) { changes.push('earliest_start = ?'); params.push(earliest_start ?? null); }
+  if (latest_end     !== undefined) { changes.push('latest_end = ?');     params.push(latest_end ?? null); }
 
   if (changes.length > 0) {
     params.push(req.params.taskId);
@@ -215,6 +229,11 @@ function remove(req, res) {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND project_id = ?')
     .get(req.params.taskId, req.params.id);
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
+
+  const projectForArchive = db.prepare('SELECT status FROM projects WHERE id = ?').get(req.params.id);
+  if (projectForArchive?.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  }
 
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
   broadcast('tasks_updated', { project_id: Number(req.params.id) });

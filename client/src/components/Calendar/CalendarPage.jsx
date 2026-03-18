@@ -96,27 +96,35 @@ function MonthHeaderCell({ monthIndex, isCurrentMonth }) {
 }
 
 // ─── Ligne tâche — sous-barre Gantt ──────────────────────────────────────────
-// taskNum    : numéro de cette tâche (1-based) dans la liste du projet
-// depNum     : numéro de la tâche parente (ou null)
 
-function TaskGanttRow({ task, year, taskNum, depNum }) {
+function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisibleMonths }) {
   const span = getTaskSpan(task, year)
   if (!span) return null
 
-  const { startMonth, endMonth } = span
-  const barLeftPct  = (startMonth / 12) * 100
-  const barRightPct = ((endMonth + 1) / 12) * 100
-  const barWidthPct = Math.max(barRightPct - barLeftPct, 100 / 12 * 0.4)
+  const lastVisibleMonth = firstVisibleMonth + numVisibleMonths - 1
+
+  const rawStart = span.startMonth
+  const rawEnd   = span.endMonth
+
+  // Only render if overlaps with visible range
+  if (rawEnd < firstVisibleMonth || rawStart > lastVisibleMonth) return null
+
+  const barStart = Math.max(rawStart, firstVisibleMonth)
+  const barEnd   = Math.min(rawEnd, lastVisibleMonth)
+
+  const barLeftPct  = Math.max(0, Math.min(100, ((barStart - firstVisibleMonth) / numVisibleMonths) * 100))
+  const barRightPct = Math.max(0, Math.min(100, ((barEnd + 1 - firstVisibleMonth) / numVisibleMonths) * 100))
+  const barWidthPct = Math.max(barRightPct - barLeftPct, (100 / numVisibleMonths) * 0.4)
 
   const statusColor =
     task.status === 'done'        ? '#10B981' :
-    task.status === 'in_progress' ? '#6366F1' : '#9CA3AF'
+    task.status === 'in_progress' ? '#F97316' : '#F59E0B'
 
   const startLabel = task.start_date ? format(parseISO(task.start_date), 'd MMM') : null
   const endLabel   = task.due_date   ? format(parseISO(task.due_date),   'd MMM') : null
 
   return (
-    <div className="flex items-center min-h-14 border-b border-gray-100 last:border-0 bg-indigo-50/20">
+    <div className="flex items-center min-h-14 border-b border-gray-100 last:border-0">
       {/* Label gauche */}
       <div className="w-56 flex-shrink-0 flex items-center gap-1.5 pl-3 pr-2 py-2 overflow-hidden">
         {/* Numéro de la tâche */}
@@ -151,7 +159,6 @@ function TaskGanttRow({ task, year, taskNum, depNum }) {
             left: `${barLeftPct}%`,
             width: `${barWidthPct}%`,
             backgroundColor: statusColor,
-            opacity: task.status === 'done' ? 0.4 : 0.75,
           }}
         >
           <span className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
@@ -187,7 +194,7 @@ function TaskGanttRow({ task, year, taskNum, depNum }) {
 function TasksEmptyRow({ tasks }) {
   const withDates = tasks.filter((t) => t.start_date || t.due_date)
   return (
-    <div className="flex items-center min-h-8 border-b border-gray-100 bg-indigo-50/20">
+    <div className="flex items-center min-h-8 border-b border-gray-100">
       <div className="w-56 flex-shrink-0 px-3 py-1" style={{ paddingLeft: '2rem' }}>
         <span className="text-[10px] text-gray-400 italic">
           {tasks.length === 0
@@ -204,9 +211,14 @@ function TasksEmptyRow({ tasks }) {
 
 // ─── Ligne projet — barre Gantt avec poignées ─────────────────────────────────
 
-function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onToggleExpand, onProjectClick, drag, canDrag, isExpanded }) {
+function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onToggleExpand, onProjectClick, drag, canDrag, isExpanded, firstVisibleMonth, numVisibleMonths }) {
   const span = getSpan(project, year)
   if (!span) return null
+
+  const lastVisibleMonth = firstVisibleMonth + numVisibleMonths - 1
+
+  // Only render if project overlaps visible range
+  if (span.endMonth < firstVisibleMonth || span.startMonth > lastVisibleMonth) return null
 
   const isDragging = drag?.project.id === project.id
 
@@ -216,16 +228,21 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
   const barStart = Math.min(dispStart, dispEnd)
   const barEnd   = Math.max(dispStart, dispEnd)
 
-  const barLeftPct  = (barStart / 12) * 100
-  const barRightPct = ((barEnd + 1) / 12) * 100
-  const barWidthPct = Math.max(barRightPct - barLeftPct, 100 / 12 * 0.5)
+  const clampedStart = Math.max(barStart, firstVisibleMonth)
+  const clampedEnd   = Math.min(barEnd, lastVisibleMonth)
+
+  const barLeftPct  = Math.max(0, Math.min(100, ((clampedStart - firstVisibleMonth) / numVisibleMonths) * 100))
+  const barRightPct = Math.max(0, Math.min(100, ((clampedEnd + 1 - firstVisibleMonth) / numVisibleMonths) * 100))
+  const barWidthPct = Math.max(barRightPct - barLeftPct, (100 / numVisibleMonths) * 0.5)
 
   const poleColor = project.pole === 'dev' ? '#4F46E5' : '#059669'
   const priority  = PRIORITY_CONFIG[project.priority]
 
   const band = getConstraintBand(project, year)
-  const bandLeftPct  = band ? (band.startMonth / 12) * 100 : null
-  const bandRightPct = band ? ((band.endMonth + 1) / 12) * 100 : null
+  const bandClampedStart = band ? Math.max(band.startMonth, firstVisibleMonth) : null
+  const bandClampedEnd   = band ? Math.min(band.endMonth, lastVisibleMonth) : null
+  const bandLeftPct  = bandClampedStart !== null ? Math.max(0, Math.min(100, ((bandClampedStart - firstVisibleMonth) / numVisibleMonths) * 100)) : null
+  const bandRightPct = bandClampedEnd !== null ? Math.max(0, Math.min(100, ((bandClampedEnd + 1 - firstVisibleMonth) / numVisibleMonths) * 100)) : null
 
   const startLabel = isDragging && (drag.type === 'start' || drag.type === 'move')
     ? MONTHS_SHORT[drag.dispStart]
@@ -448,6 +465,8 @@ export default function CalendarPage() {
   const [loadingTasks, setLoadingTasks] = useState(false)
   // drag = { project, type, dispStart, dispEnd, origStart?, origEnd?, anchorPct? }
   const [drag, setDrag]               = useState(null)
+  const [calViewMonths, setCalViewMonths] = useState(12)   // 12 | 6
+  const [calHalf, setCalHalf]             = useState(0)    // 0=Jan-Jun, 1=Jul-Dec
 
   const { projects, fetchProjects, updateProject, filters } = useProjectStore()
   const user    = useAuthStore((s) => s.user)
@@ -464,6 +483,11 @@ export default function CalendarPage() {
 
   const plannedProjects   = filteredProjects.filter((p) => getSpan(p, year) !== null)
   const unplannedProjects = filteredProjects.filter((p) => !p.start_date && !p.due_date)
+
+  // Visible month range helpers
+  const firstVisibleMonth = calViewMonths === 6 ? calHalf * 6 : 0
+  const lastVisibleMonth  = calViewMonths === 6 ? calHalf * 6 + 5 : 11
+  const numVisibleMonths  = calViewMonths
 
   function projectsByPole(pole) {
     return plannedProjects
@@ -510,7 +534,7 @@ export default function CalendarPage() {
   const handlePointerMove = useCallback((e) => {
     if (!drag || !timelineRef.current) return
     const rect = timelineRef.current.getBoundingClientRect()
-    const newMonth = Math.max(0, Math.min(11, Math.floor(((e.clientX - rect.left) / rect.width) * 12)))
+    const newMonth = Math.max(0, Math.min(11, Math.floor(((e.clientX - rect.left) / rect.width) * numVisibleMonths) + firstVisibleMonth))
 
     if (drag.type === 'start') {
       setDrag((d) => d ? { ...d, dispStart: newMonth } : null)
@@ -518,13 +542,13 @@ export default function CalendarPage() {
       setDrag((d) => d ? { ...d, dispEnd: newMonth } : null)
     } else {
       const currentPct = ((e.clientX - rect.left) / rect.width) * 100
-      const deltaMonths = Math.round((currentPct - drag.anchorPct) / (100 / 12))
+      const deltaMonths = Math.round((currentPct - drag.anchorPct) / (100 / numVisibleMonths))
       const duration = drag.origEnd - drag.origStart
       const newStart = Math.max(0, Math.min(11 - Math.max(0, duration), drag.origStart + deltaMonths))
       const newEnd   = Math.min(11, newStart + Math.max(0, duration))
       setDrag((d) => d ? { ...d, dispStart: newStart, dispEnd: newEnd } : null)
     }
-  }, [drag])
+  }, [drag, firstVisibleMonth, numVisibleMonths])
 
   const handlePointerUp = useCallback(async () => {
     if (!drag) return
@@ -540,32 +564,37 @@ export default function CalendarPage() {
       updates.start_date = format(new Date(year, dispStart, Math.min(sDay, getDaysInMonth(new Date(year, dispStart)))), 'yyyy-MM-dd')
       updates.due_date   = format(new Date(year, dispEnd,   Math.min(eDay, getDaysInMonth(new Date(year, dispEnd)))),   'yyyy-MM-dd')
 
-      // Décaler les tâches du même delta mois
+      // Update project FIRST
+      await updateProject(project.id, updates)
+
+      // Then try to update tasks (best effort)
       const deltaMonths = dispStart - origStart
       if (deltaMonths !== 0) {
         const projectTasks = tasksCache[project.id] || []
         const tasksToUpdate = projectTasks.filter((t) => t.start_date || t.due_date)
         if (tasksToUpdate.length > 0) {
-          const updatedTasks = await Promise.all(
-            tasksToUpdate.map((t) => {
-              const taskUpdates = {}
-              if (t.start_date) {
-                const d = parseISO(t.start_date)
-                taskUpdates.start_date = format(new Date(d.getFullYear(), d.getMonth() + deltaMonths, d.getDate()), 'yyyy-MM-dd')
-              }
-              if (t.due_date) {
-                const d = parseISO(t.due_date)
-                taskUpdates.due_date = format(new Date(d.getFullYear(), d.getMonth() + deltaMonths, d.getDate()), 'yyyy-MM-dd')
-              }
-              return taskService.update(project.id, t.id, taskUpdates)
+          try {
+            const updatedTasks = await Promise.all(
+              tasksToUpdate.map((t) => {
+                const taskUpdates = {}
+                if (t.start_date) {
+                  const d = parseISO(t.start_date)
+                  taskUpdates.start_date = format(new Date(d.getFullYear(), d.getMonth() + deltaMonths, d.getDate()), 'yyyy-MM-dd')
+                }
+                if (t.due_date) {
+                  const d = parseISO(t.due_date)
+                  taskUpdates.due_date = format(new Date(d.getFullYear(), d.getMonth() + deltaMonths, d.getDate()), 'yyyy-MM-dd')
+                }
+                return taskService.update(project.id, t.id, taskUpdates)
+              })
+            )
+            setTasksCache((prev) => {
+              const existing = prev[project.id] || []
+              const byId = {}
+              updatedTasks.forEach((t) => { byId[t.id] = t })
+              return { ...prev, [project.id]: existing.map((t) => byId[t.id] || t) }
             })
-          )
-          setTasksCache((prev) => {
-            const existing = prev[project.id] || []
-            const byId = {}
-            updatedTasks.forEach((t) => { byId[t.id] = t })
-            return { ...prev, [project.id]: existing.map((t) => byId[t.id] || t) }
-          })
+          } catch (_) { /* ignore task update failures */ }
         }
       }
     } else if (type === 'start') {
@@ -582,6 +611,7 @@ export default function CalendarPage() {
           : 1
         updates.start_date = format(new Date(year, currentMonth, day), 'yyyy-MM-dd')
       }
+      await updateProject(project.id, updates)
     } else {
       const otherMonth = span?.hasStart ? parseISO(project.start_date).getMonth() : null
       const currentMonth = dispEnd
@@ -596,9 +626,8 @@ export default function CalendarPage() {
           : getDaysInMonth(new Date(year, currentMonth))
         updates.due_date = format(new Date(year, currentMonth, day), 'yyyy-MM-dd')
       }
+      await updateProject(project.id, updates)
     }
-
-    await updateProject(project.id, updates)
   }, [drag, year, updateProject, tasksCache])
 
   useEffect(() => {
@@ -643,8 +672,8 @@ export default function CalendarPage() {
     await updateProject(project.id, { start_date: null, due_date: null })
   }
 
-  const todayPct = year === currentYear
-    ? ((today.getMonth() + (today.getDate() - 1) / getDaysInMonth(today)) / 12) * 100
+  const todayPct = year === currentYear && currentMonth >= firstVisibleMonth && currentMonth <= lastVisibleMonth
+    ? ((today.getMonth() + (today.getDate() - 1) / getDaysInMonth(today) - firstVisibleMonth) / numVisibleMonths) * 100
     : null
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
@@ -698,13 +727,15 @@ export default function CalendarPage() {
                 drag={drag}
                 canDrag={canDrag}
                 isExpanded={isExpanded}
+                firstVisibleMonth={firstVisibleMonth}
+                numVisibleMonths={numVisibleMonths}
               />
 
               {/* Sous-lignes tâches */}
               {isExpanded && (
                 <div className="border-l-2 border-indigo-200 ml-4 relative">
                   {loadingTasks && tasks.length === 0 ? (
-                    <div className="flex items-center min-h-8 bg-indigo-50/20 px-8">
+                    <div className="flex items-center min-h-8 px-8">
                       <span className="text-[10px] text-gray-400 italic">Chargement des tâches…</span>
                     </div>
                   ) : tasksWithDates.length === 0 ? (
@@ -720,7 +751,15 @@ export default function CalendarPage() {
                             })()
                           : null
                         return (
-                          <TaskGanttRow key={task.id} task={task} year={year} taskNum={taskNum} depNum={depNum} />
+                          <TaskGanttRow
+                            key={task.id}
+                            task={task}
+                            year={year}
+                            taskNum={taskNum}
+                            depNum={depNum}
+                            firstVisibleMonth={firstVisibleMonth}
+                            numVisibleMonths={numVisibleMonths}
+                          />
                         )
                       })}
                     </>
@@ -729,8 +768,8 @@ export default function CalendarPage() {
                   {tasksWithDates.length > 0 && (
                     <div className="flex items-center gap-3 px-8 py-1 bg-indigo-50/10 border-t border-indigo-100">
                       {[
-                        { status: 'todo', color: '#9CA3AF', label: 'À faire' },
-                        { status: 'in_progress', color: '#6366F1', label: 'En cours' },
+                        { status: 'todo', color: '#F59E0B', label: 'À faire' },
+                        { status: 'in_progress', color: '#F97316', label: 'En cours' },
                         { status: 'done', color: '#10B981', label: 'Terminé' },
                       ].map(({ color, label }) => (
                         <span key={label} className="flex items-center gap-1 text-[10px] text-gray-400">
@@ -763,23 +802,31 @@ export default function CalendarPage() {
             {canDrag && ' · Glisser la barre pour déplacer · les poignées pour redimensionner'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <span className="text-sm font-bold text-gray-800 w-12 text-center">{year}</span>
-          <button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          {year !== currentYear && (
-            <button onClick={() => setYear(currentYear)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">
-              Aujourd'hui
+        <div className="flex flex-col items-end gap-2">
+          {/* Contrôle vue (12 mois / 6 mois) */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setCalViewMonths(12)} className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${calViewMonths === 12 ? 'bg-indigo-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>12 mois</button>
+            <button onClick={() => { setCalViewMonths(6); setCalHalf(new Date().getMonth() >= 6 ? 1 : 0) }} className={`text-xs px-3 py-1 rounded-lg font-medium transition-colors ${calViewMonths === 6 ? 'bg-indigo-600 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'}`}>6 mois</button>
+            {calViewMonths === 6 && (
+              <>
+                <button onClick={() => setCalHalf(0)} className={`text-xs px-2 py-1 rounded-lg transition-colors ${calHalf === 0 ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>Jan–Juin</button>
+                <button onClick={() => setCalHalf(1)} className={`text-xs px-2 py-1 rounded-lg transition-colors ${calHalf === 1 ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}>Juil–Déc</button>
+              </>
+            )}
+          </div>
+          {/* Navigation année */}
+          <div className="flex items-center gap-1">
+            <button onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
             </button>
-          )}
+            <span className="text-sm font-bold text-gray-800 w-12 text-center">{year}</span>
+            <button onClick={() => setYear((y) => y + 1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+            {year !== currentYear && (
+              <button onClick={() => setYear(currentYear)} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600">Auj.</button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -795,22 +842,35 @@ export default function CalendarPage() {
                 Projet
               </div>
               <div className="flex-1 flex" ref={timelineRef}>
-                {Array.from({ length: 12 }, (_, i) => (
-                  <MonthHeaderCell key={i} monthIndex={i} isCurrentMonth={i === currentMonth && year === currentYear} />
-                ))}
+                {Array.from({ length: numVisibleMonths }, (_, i) => {
+                  const mi = firstVisibleMonth + i
+                  return (
+                    <div key={mi} className="flex-1 flex flex-col border-r border-gray-100 last:border-0">
+                      <MonthHeaderCell monthIndex={mi} isCurrentMonth={mi === currentMonth && year === currentYear} />
+                      {calViewMonths === 6 && (
+                        <div className="flex justify-between px-1 pb-1">
+                          {[1, 8, 15, 22, 29].map((d) => (
+                            <span key={d} className="text-[9px] text-gray-300">{d}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
             {/* Corps */}
             <div className="relative">
-              {Array.from({ length: 12 }, (_, i) => {
-                const leftPct  = (i / 12) * 100
-                const widthPct = (1 / 12) * 100
+              {Array.from({ length: numVisibleMonths }, (_, i) => {
+                const mi = firstVisibleMonth + i
+                const leftPct  = (i / numVisibleMonths) * 100
+                const widthPct = (1 / numVisibleMonths) * 100
                 return (
                   <div
-                    key={i}
+                    key={mi}
                     className={`absolute top-0 bottom-0 border-r border-gray-50 pointer-events-none ${
-                      i === currentMonth && year === currentYear ? 'bg-amber-50/25' : i % 2 === 0 ? '' : 'bg-gray-50/30'
+                      mi === currentMonth && year === currentYear ? 'bg-amber-50/25' : i % 2 === 0 ? '' : 'bg-gray-50/30'
                     }`}
                     style={{ left: `calc(224px + ${leftPct}% * (100% - 224px) / 100)`, width: `calc(${widthPct}% * (100% - 224px) / 100)` }}
                   />

@@ -157,6 +157,10 @@ function update(req, res) {
     return res.status(403).json({ error: 'Accès limité à votre pôle' });
   }
 
+  if (project.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  }
+
   const result = projectSchema.partial().safeParse(req.body);
   if (!result.success) {
     return res.status(400).json({ error: 'Données invalides', details: result.error.flatten() });
@@ -208,6 +212,10 @@ function remove(req, res) {
     return res.status(403).json({ error: 'Accès limité à votre pôle' });
   }
 
+  if (project.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  }
+
   db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
   broadcast('project_deleted', { id: Number(req.params.id) });
   res.json({ message: 'Projet supprimé' });
@@ -225,6 +233,10 @@ function move(req, res) {
 
   if (req.user.role === 'lead' && req.user.pole !== project.pole) {
     return res.status(403).json({ error: 'Accès limité à votre pôle' });
+  }
+
+  if (project.status === 'done' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
   }
 
   const { status, position } = result.data;
