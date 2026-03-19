@@ -817,3 +817,87 @@ npm run dev
 # Redémarrer le frontend
 cd ../client && npm run dev
 ```
+
+---
+
+## Lot 12 — Bug save tâche + largeurs modales + Mon Espace pleine page (session 12)
+
+### 38. Correction bug : impossible de sauvegarder une tâche en cours
+
+**Avant :** Toute tentative de sauvegarde d'une tâche existante (PUT `/projects/:id/tasks/:taskId`) provoquait un `ReferenceError: notes is not defined` côté serveur. La variable `notes` était utilisée dans la logique de construction du `UPDATE` SQL mais absente du destructuring de `result.data`. L'erreur 500 était silencieuse côté client (pas de try/catch).
+
+**Après :** `notes` ajouté au destructuring. Le formulaire d'édition inline dispose désormais d'un try/catch qui affiche l'erreur en rouge dans le formulaire si le serveur rejette la requête.
+
+**Fichiers modifiés :**
+- `server/src/controllers/taskController.js` — ajout de `notes` au destructuring ligne 122
+- `client/src/components/Project/ProjectModal.jsx` — ajout state `taskError`, try/catch dans `handleSaveTask`, affichage erreur inline, réinitialisation erreur à l'annulation
+
+### 39. Agrandissement des modales (toutes les sous-fenêtres)
+
+**Avant :** Modales de largeur variable : ProjectForm `85vw/960px`, AdminUsers `max-w-md`, AdminTags `max-w-sm`.
+
+**Après :** Toutes les modales élargies pour occuper quasi la totalité de la largeur de la page :
+- ProjectForm : `95vw / 1400px max / 92vh`
+- AdminUsersPage : `max-w-2xl`
+- AdminTagsPage : `max-w-xl`
+- ProjectModal : déjà à `94vw/1400px`, inchangé
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectForm.jsx` — style width/maxWidth/maxHeight
+- `client/src/components/Admin/AdminUsersPage.jsx` — classe `max-w-2xl`
+- `client/src/components/Admin/AdminTagsPage.jsx` — classe `max-w-xl`
+
+### 40. Mon Espace — pleine page + cartes projet plus grandes
+
+**Avant :** Conteneur limité à `max-w-4xl mx-auto` (~896px). Cartes projet compactes avec texte `text-sm`, padding `px-4 py-3`, barre de progression `h-1`.
+
+**Après :** Conteneur `w-full` (pleine largeur). Cartes projet élargies : padding `px-6 py-4`, titre `text-base`, badges `text-xs px-3 py-1`, barre de progression `h-2`. Items de tâche : padding `px-4 py-3`, titre `text-base`, icône statut 26×26px. En-tête utilisateur : avatar 14×14, nom `text-2xl`.
+
+**Fichiers modifiés :**
+- `client/src/components/MonEspace/MonEspacePage.jsx` — conteneur, accordéon projet, items tâche, en-tête
+
+---
+
+## Lot 13 — Formulaire création projet : plein écran + tâches complètes (session 13)
+
+### 41. Colonne tâches initiales — fonctionnalités complètes
+
+**Avant :** Lors de la création d'un projet, la colonne droite (tâches) permettait seulement de saisir un `titre` et une `durée`. La colonne était fixée à `w-80` (320px). La modale était limitée à `95vw/1400px`.
+
+**Après :**
+- Modale à `98vw / 1600px max / 95vh` — quasi plein écran
+- Colonne tâches en `flex-1` (moitié de l'espace, même largeur que la colonne projet)
+- Formulaire tâche enrichi avec les mêmes champs que l'édition inline dans la fiche projet :
+  - `start_date` / `due_date` avec min dynamique selon la tâche précédente
+  - `earliest_start` / `latest_end` (au plus tôt / au plus tard)
+  - `depends_on` — sélection parmi les tâches déjà ajoutées dans la liste
+  - `assigned_to` — sélection parmi les membres du projet (ou tous les users si aucun membre sélectionné)
+- Carte tâche dans la liste : affiche toutes les infos (dates, contraintes, dépendance ⛓, assignation 👤)
+- Soumission : création séquentielle des tâches avec résolution des dépendances (`idMap` tempId → realId)
+
+**Fichiers modifiés :**
+- `client/src/components/Project/ProjectForm.jsx` — réécriture complète du bloc tâches initiales + état `EMPTY_TASK_INPUT`, `assignableUsers`, `idMap` dans `handleSubmit`
+
+---
+
+## Lot 14 — Style ClickUp barres Gantt + ligne "Aujourd'hui" (session 14)
+
+### 42. Barres Gantt — style ClickUp
+
+**Avant :** Barres plates `h-6` (24px), couleur unique par pôle (indigo/emerald), sans ombre, sans texte à l'intérieur.
+
+**Après :**
+- Palette de 10 couleurs vives (`BAR_COLORS`) assignées par `project.id % 10` : violet, orange, sky, pink, emerald, amber, indigo, teal, red, lime
+- Barres projet : `height: 32px`, gradient diagonal `linear-gradient(135deg, …)`, reflet blanc en haut, ombre colorée (`boxShadow`), titre du projet en blanc gras à l'intérieur
+- Barres tâche : `height: 26px`, palette de couleurs par statut (`TASK_STATUS_COLOR` : `#94A3B8` todo, `#6366F1` in_progress, `#10B981` done), ombre colorée, texte blanc
+- Poignées de redimensionnement redessinées (tirets blancs `w-0.5 h-3.5` + fond semi-transparent)
+- Hauteur des lignes projet : `min-h-[4.5rem]`
+
+### 43. Ligne "Aujourd'hui" — plus visible
+
+**Avant :** Ligne `w-px bg-red-400/60` (1px, transparente), petit cercle sans label.
+
+**Après :** Ligne de 2px avec dégradé rouge + glow (`boxShadow`), label **"Auj."** en capsule rouge au sommet, cercle rouge sous le label.
+
+**Fichiers modifiés :**
+- `client/src/components/Calendar/CalendarPage.jsx` — constantes `BAR_COLORS`, `getBarColor`, `TASK_STATUS_COLOR` ; style barres projet et tâche ; ligne today ; légende statuts tâche

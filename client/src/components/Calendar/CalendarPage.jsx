@@ -12,6 +12,32 @@ import ProjectModal from '../Project/ProjectModal'
 import { taskService } from '../../services/taskService'
 
 const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
+const MONTHS_FULL  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+
+// Palette de couleurs vives (style ClickUp) — assignées par id de projet
+const BAR_COLORS = [
+  '#7C3AED', // violet
+  '#F97316', // orange
+  '#0EA5E9', // sky
+  '#EC4899', // pink
+  '#10B981', // emerald
+  '#F59E0B', // amber
+  '#6366F1', // indigo
+  '#14B8A6', // teal
+  '#EF4444', // red
+  '#84CC16', // lime
+]
+
+function getBarColor(project) {
+  return BAR_COLORS[project.id % BAR_COLORS.length]
+}
+
+// Couleurs de statut pour les barres de tâche
+const TASK_STATUS_COLOR = {
+  done:        '#10B981',
+  in_progress: '#6366F1',
+  todo:        '#94A3B8',
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,11 +112,14 @@ function MonthHeaderCell({ monthIndex, isCurrentMonth }) {
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 text-center text-sm py-3 border-r border-gray-100 last:border-0 font-semibold transition-colors select-none ${
-        isCurrentMonth ? 'text-amber-600 bg-amber-50/60' : 'text-gray-400'
+      className={`flex-1 text-center py-3 border-r border-gray-100 last:border-0 font-bold transition-colors select-none tracking-wide ${
+        isCurrentMonth
+          ? 'text-indigo-600 bg-indigo-50/60'
+          : 'text-gray-500'
       } ${isOver ? 'bg-indigo-100 text-indigo-600' : ''}`}
+      style={{ fontSize: 13 }}
     >
-      {MONTHS_SHORT[monthIndex]}
+      {MONTHS_FULL[monthIndex]}
     </div>
   )
 }
@@ -116,21 +145,18 @@ function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisib
   const barRightPct = Math.max(0, Math.min(100, ((barEnd + 1 - firstVisibleMonth) / numVisibleMonths) * 100))
   const barWidthPct = Math.max(barRightPct - barLeftPct, (100 / numVisibleMonths) * 0.4)
 
-  const statusColor =
-    task.status === 'done'        ? '#10B981' :
-    task.status === 'in_progress' ? '#F97316' : '#F59E0B'
+  const statusColor = TASK_STATUS_COLOR[task.status] || TASK_STATUS_COLOR.todo
 
   const startLabel = task.start_date ? format(parseISO(task.start_date), 'd MMM') : null
   const endLabel   = task.due_date   ? format(parseISO(task.due_date),   'd MMM') : null
 
   return (
-    <div className="flex items-center min-h-14 border-b border-gray-100 last:border-0">
+    <div className="flex items-center min-h-[3.5rem] border-b border-gray-100 last:border-0">
       {/* Label gauche */}
       <div className="w-56 flex-shrink-0 flex items-center gap-1.5 pl-3 pr-2 py-2 overflow-hidden">
-        {/* Numéro de la tâche */}
         <span
-          className="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-          style={{ backgroundColor: statusColor + '22', color: statusColor }}
+          className="flex-shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white"
+          style={{ backgroundColor: statusColor }}
           title={`Tâche n°${taskNum}`}
         >
           {taskNum}
@@ -138,7 +164,6 @@ function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisib
 
         <span className="text-xs text-gray-600 truncate flex-1">{task.title}</span>
 
-        {/* Référence à la tâche parente */}
         {depNum !== null && (
           <span
             className="flex-shrink-0 text-[10px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-600 whitespace-nowrap"
@@ -154,15 +179,17 @@ function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisib
       {/* Timeline tâche */}
       <div className="flex-1 relative min-h-[3.5rem]">
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-5 rounded-full"
+          className="absolute top-1/2 -translate-y-1/2 rounded-full select-none"
           style={{
             left: `${barLeftPct}%`,
             width: `${barWidthPct}%`,
+            height: 26,
             backgroundColor: statusColor,
+            boxShadow: `0 2px 8px ${statusColor}55`,
           }}
         >
-          <span className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
-            <span className="text-[10px] text-white font-medium truncate">{task.title}</span>
+          <span className="absolute inset-0 flex items-center px-3 overflow-hidden pointer-events-none">
+            <span className="text-[11px] text-white font-semibold truncate drop-shadow-sm">{task.title}</span>
           </span>
         </div>
         {/* Labels dates en dessous */}
@@ -170,7 +197,7 @@ function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisib
           {startLabel && (
             <span
               className="absolute text-[10px] text-gray-400 whitespace-nowrap"
-              style={{ left: `${barLeftPct}%`, top: 'calc(50% + 12px)' }}
+              style={{ left: `${barLeftPct}%`, top: 'calc(50% + 14px)' }}
             >
               {startLabel}
             </span>
@@ -178,7 +205,7 @@ function TaskGanttRow({ task, year, taskNum, depNum, firstVisibleMonth, numVisib
           {endLabel && barLeftPct !== barRightPct && (
             <span
               className="absolute text-[10px] text-gray-400 whitespace-nowrap"
-              style={{ left: `${barRightPct}%`, top: 'calc(50% + 12px)', transform: 'translateX(-100%)' }}
+              style={{ left: `${barRightPct}%`, top: 'calc(50% + 14px)', transform: 'translateX(-100%)' }}
             >
               {endLabel}
             </span>
@@ -236,6 +263,7 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
   const barWidthPct = Math.max(barRightPct - barLeftPct, (100 / numVisibleMonths) * 0.5)
 
   const poleColor = project.pole === 'dev' ? '#4F46E5' : '#059669'
+  const barColor  = getBarColor(project)
   const priority  = PRIORITY_CONFIG[project.priority]
 
   const band = getConstraintBand(project, year)
@@ -255,7 +283,7 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
   const hasAllDates = span.hasStart && span.hasEnd
 
   return (
-    <div className={`flex items-center min-h-14 border-b border-gray-50 last:border-0 transition-colors ${isExpanded ? 'bg-indigo-50/30' : 'hover:bg-gray-50/60'} group`}>
+    <div className={`flex items-center min-h-[4.5rem] border-b border-gray-100 last:border-0 transition-colors ${isExpanded ? 'bg-indigo-50/30' : 'hover:bg-gray-50/40'} group`}>
       {/* Label gauche */}
       <div className="w-56 flex-shrink-0 flex items-start gap-2 px-3 py-2 overflow-hidden">
         {/* Bouton expand tâches */}
@@ -318,26 +346,40 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
 
         {/* Barre principale */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 h-6 rounded-full select-none"
+          className="absolute top-1/2 -translate-y-1/2 rounded-full select-none overflow-hidden"
           style={{
             left: `${barLeftPct}%`,
             width: `${barWidthPct}%`,
-            backgroundColor: poleColor,
-            opacity: isDragging ? 0.75 : 1,
+            height: 32,
+            background: `linear-gradient(135deg, ${barColor}ee 0%, ${barColor} 60%, ${barColor}cc 100%)`,
+            boxShadow: isDragging ? 'none' : `0 3px 10px ${barColor}66, 0 1px 3px ${barColor}44`,
+            opacity: isDragging ? 0.7 : 1,
             transition: isDragging ? 'none' : 'left 0.05s, width 0.05s',
           }}
         >
+          {/* Reflet lumineux en haut */}
+          <div className="absolute inset-x-0 top-0 h-1/2 rounded-t-full pointer-events-none"
+            style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, transparent 100%)' }}
+          />
+
+          {/* Titre au centre */}
+          <div className="absolute inset-0 mx-5 flex items-center overflow-hidden pointer-events-none">
+            <span className="text-xs text-white font-semibold truncate drop-shadow-sm leading-none">
+              {project.title}
+            </span>
+          </div>
+
           {/* Poignée gauche */}
           <div
-            className="absolute left-0 top-0 h-full w-5 rounded-l-full flex items-center justify-center hover:brightness-75 z-10"
-            style={{ cursor: canDrag ? 'ew-resize' : 'default' }}
+            className="absolute left-0 top-0 h-full w-5 rounded-l-full flex items-center justify-center z-10"
+            style={{ cursor: canDrag ? 'ew-resize' : 'default', background: 'rgba(0,0,0,0.08)' }}
             onPointerDown={canDrag
               ? (e) => { e.stopPropagation(); onBarDrag(e, project, 'start') }
               : undefined}
             title="Glisser pour changer la date de début"
           >
-            <div className="w-px h-3 bg-white/70 rounded-full" />
-            <div className="w-px h-3 bg-white/40 rounded-full ml-0.5" />
+            <div className="w-0.5 h-3.5 bg-white/80 rounded-full" />
+            <div className="w-0.5 h-3.5 bg-white/40 rounded-full ml-0.5" />
           </div>
 
           {/* Zone centrale */}
@@ -351,15 +393,15 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
 
           {/* Poignée droite */}
           <div
-            className="absolute right-0 top-0 h-full w-5 rounded-r-full flex items-center justify-center hover:brightness-75 z-10"
-            style={{ cursor: canDrag ? 'ew-resize' : 'default' }}
+            className="absolute right-0 top-0 h-full w-5 rounded-r-full flex items-center justify-center z-10"
+            style={{ cursor: canDrag ? 'ew-resize' : 'default', background: 'rgba(0,0,0,0.08)' }}
             onPointerDown={canDrag
               ? (e) => { e.stopPropagation(); onBarDrag(e, project, 'end') }
               : undefined}
             title="Glisser pour changer la date de fin"
           >
-            <div className="w-px h-3 bg-white/40 rounded-full mr-0.5" />
-            <div className="w-px h-3 bg-white/70 rounded-full" />
+            <div className="w-0.5 h-3.5 bg-white/40 rounded-full mr-0.5" />
+            <div className="w-0.5 h-3.5 bg-white/80 rounded-full" />
           </div>
         </div>
 
@@ -672,9 +714,6 @@ export default function CalendarPage() {
     await updateProject(project.id, { start_date: null, due_date: null })
   }
 
-  const todayPct = year === currentYear && currentMonth >= firstVisibleMonth && currentMonth <= lastVisibleMonth
-    ? ((today.getMonth() + (today.getDate() - 1) / getDaysInMonth(today) - firstVisibleMonth) / numVisibleMonths) * 100
-    : null
 
   // ─── Rendu ────────────────────────────────────────────────────────────────
 
@@ -768,9 +807,9 @@ export default function CalendarPage() {
                   {tasksWithDates.length > 0 && (
                     <div className="flex items-center gap-3 px-8 py-1 bg-indigo-50/10 border-t border-indigo-100">
                       {[
-                        { status: 'todo', color: '#F59E0B', label: 'À faire' },
-                        { status: 'in_progress', color: '#F97316', label: 'En cours' },
-                        { status: 'done', color: '#10B981', label: 'Terminé' },
+                        { status: 'todo',        color: TASK_STATUS_COLOR.todo,        label: 'À faire' },
+                        { status: 'in_progress', color: TASK_STATUS_COLOR.in_progress, label: 'En cours' },
+                        { status: 'done',        color: TASK_STATUS_COLOR.done,        label: 'Terminé' },
                       ].map(({ color, label }) => (
                         <span key={label} className="flex items-center gap-1 text-[10px] text-gray-400">
                           <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: color }} />
@@ -870,21 +909,13 @@ export default function CalendarPage() {
                   <div
                     key={mi}
                     className={`absolute top-0 bottom-0 border-r border-gray-50 pointer-events-none ${
-                      mi === currentMonth && year === currentYear ? 'bg-amber-50/25' : i % 2 === 0 ? '' : 'bg-gray-50/30'
+                      mi === currentMonth && year === currentYear ? 'bg-indigo-50/30' : i % 2 === 0 ? '' : 'bg-gray-50/30'
                     }`}
                     style={{ left: `calc(224px + ${leftPct}% * (100% - 224px) / 100)`, width: `calc(${widthPct}% * (100% - 224px) / 100)` }}
                   />
                 )
               })}
 
-              {todayPct !== null && (
-                <div
-                  className="absolute top-0 bottom-0 w-px bg-red-400/60 pointer-events-none z-20"
-                  style={{ left: `calc(224px + ${todayPct}% * (100% - 224px) / 100)` }}
-                >
-                  <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-400 rounded-full" />
-                </div>
-              )}
 
               {plannedProjects.length === 0 ? (
                 <div className="py-12 text-center text-sm text-gray-400">
@@ -931,7 +962,10 @@ export default function CalendarPage() {
           <span className="w-4 h-3 border border-dashed border-gray-400 rounded inline-block" />
           Contrainte temporelle
         </span>
-        <span className="text-amber-600 ml-auto">◆ mois actuel</span>
+        <span className="text-indigo-600 ml-auto flex items-center gap-1">
+          <span className="w-3 h-3 rounded bg-indigo-50 border border-indigo-300 inline-block" />
+          Mois en cours
+        </span>
       </div>
 
       {selected && (

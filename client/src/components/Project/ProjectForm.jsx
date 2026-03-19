@@ -9,6 +9,17 @@ const PRIORITY_LABELS = { critical: 'Critique', high: 'Haute', normal: 'Normale'
 const STATUSES = ['backlog', 'in_progress', 'on_hold', 'done']
 const STATUS_LABELS = { backlog: 'Idées', in_progress: 'En cours', on_hold: 'En attente', done: 'Terminé' }
 
+const EMPTY_TASK_INPUT = {
+  title: '',
+  duration_days: 1,
+  start_date: '',
+  due_date: '',
+  earliest_start: '',
+  latest_end: '',
+  depends_on: '',   // temp id (string) of another formTask
+  assigned_to: '',  // user id (string)
+}
+
 export default function ProjectForm({ project, onClose }) {
   const isEdit = !!project
   const { createProject, updateProject, tags } = useProjectStore()
@@ -18,8 +29,8 @@ export default function ProjectForm({ project, onClose }) {
   const [error, setError]   = useState('')
 
   // Tâches pré-remplies à créer (seulement en mode création)
-  const [formTasks, setFormTasks]   = useState([])
-  const [newTaskInput, setNewTaskInput] = useState({ title: '', duration_days: 1 })
+  const [formTasks, setFormTasks]     = useState([])
+  const [newTaskInput, setNewTaskInput] = useState(EMPTY_TASK_INPUT)
 
   const defaultPole = user?.role === 'lead' ? user.pole : 'dev'
 
@@ -55,14 +66,28 @@ export default function ProjectForm({ project, onClose }) {
     }))
   }
 
+  function setTask(key, value) {
+    setNewTaskInput((p) => ({ ...p, [key]: value }))
+  }
+
   function handleAddFormTask(e) {
     e.preventDefault()
     if (!newTaskInput.title.trim()) return
     setFormTasks((prev) => [
       ...prev,
-      { id: Date.now(), title: newTaskInput.title.trim(), duration_days: Math.max(0, Number(newTaskInput.duration_days) || 1) },
+      {
+        id:             Date.now(),
+        title:          newTaskInput.title.trim(),
+        duration_days:  Math.max(0, Number(newTaskInput.duration_days) || 1),
+        start_date:     newTaskInput.start_date || null,
+        due_date:       newTaskInput.due_date || null,
+        earliest_start: newTaskInput.earliest_start || null,
+        latest_end:     newTaskInput.latest_end || null,
+        depends_on:     newTaskInput.depends_on ? Number(newTaskInput.depends_on) : null,
+        assigned_to:    newTaskInput.assigned_to ? Number(newTaskInput.assigned_to) : null,
+      },
     ])
-    setNewTaskInput({ title: '', duration_days: 1 })
+    setNewTaskInput(EMPTY_TASK_INPUT)
   }
 
   function handleRemoveFormTask(id) {
@@ -87,9 +112,20 @@ export default function ProjectForm({ project, onClose }) {
         await updateProject(project.id, payload)
       } else {
         const created = await createProject(payload)
-        // Créer les tâches pré-remplies après création du projet
+        // Créer les tâches séquentiellement en résolvant les dépendances
+        const idMap = {}  // tempId → realId
         for (const t of formTasks) {
-          await taskService.create(created.id, { title: t.title, duration_days: t.duration_days })
+          const task = await taskService.create(created.id, {
+            title:          t.title,
+            duration_days:  t.duration_days,
+            start_date:     t.start_date || null,
+            due_date:       t.due_date || null,
+            earliest_start: t.earliest_start || null,
+            latest_end:     t.latest_end || null,
+            depends_on:     t.depends_on ? (idMap[t.depends_on] ?? null) : null,
+            assigned_to:    t.assigned_to || null,
+          })
+          idMap[t.id] = task.id
         }
       }
       onClose()
@@ -102,14 +138,40 @@ export default function ProjectForm({ project, onClose }) {
 
   const totalTaskDays = formTasks.reduce((s, t) => s + t.duration_days, 0)
 
+  // Membres disponibles pour affectation de tâche :
+  // priorité aux membres déjà sélectionnés, sinon tous les utilisateurs
+  const assignableUsers = form.member_ids.length > 0
+    ? users.filter((u) => form.member_ids.includes(u.id))
+    : users
+
+  // Résout le nom d'un membre depuis son id
+  function userName(id) {
+    return users.find((u) => u.id === id)?.username || `#${id}`
+  }
+
+  // Résout le titre d'une tâche depuis son tempId
+  function taskTitle(tempId) {
+    return formTasks.find((t) => t.id === tempId)?.title || `tâche #${tempId}`
+  }
+
+  // Tâche précédente possible pour le champ depends_on du formulaire
+  // (on ne peut dépendre que d'une tâche déjà ajoutée)
+  const availableDeps = formTasks
+
+  // Min start_date pour la nouvelle tâche (dépend de la tâche précédente sélectionnée)
+  const depTask = newTaskInput.depends_on
+    ? formTasks.find((t) => t.id === Number(newTaskInput.depends_on))
+    : null
+  const minStart = depTask?.due_date || form.start_date || ''
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-2" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '85vw', maxWidth: '960px', maxHeight: '90vh' }}
+        style={{ width: '98vw', maxWidth: '1600px', height: '95vh' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="flex-shrink-0 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             {isEdit ? 'Modifier le projet' : 'Nouveau projet'}
@@ -121,7 +183,7 @@ export default function ProjectForm({ project, onClose }) {
           </button>
         </div>
 
-        {/* Corps : deux colonnes */}
+        {/* ── Corps : deux colonnes égales ── */}
         <div className="flex flex-1 min-h-0">
 
           {/* ── Colonne gauche : champs projet ── */}
@@ -315,85 +377,202 @@ export default function ProjectForm({ project, onClose }) {
             )}
           </form>
 
-          {/* ── Colonne droite : tâches initiales ── */}
+          {/* ── Colonne droite : tâches initiales (création uniquement) ── */}
           {!isEdit && (
-            <div className="w-80 flex-shrink-0 flex flex-col bg-gray-50/60">
-              {/* En-tête */}
-              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
+            <div className="flex-1 min-w-0 flex flex-col bg-gray-50/60">
+
+              {/* En-tête panneau tâches */}
+              <div className="flex-shrink-0 px-5 py-3 border-b border-gray-200 bg-white">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-800">
-                    Tâches initiales
-                    <span className="ml-1.5 text-gray-400 font-normal">({formTasks.length})</span>
-                  </h3>
-                  {formTasks.length > 0 && (
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                      {totalTaskDays}j total
-                    </span>
-                  )}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      Tâches initiales
+                      <span className="ml-1.5 text-gray-400 font-normal">({formTasks.length})</span>
+                      {totalTaskDays > 0 && (
+                        <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-normal">
+                          {totalTaskDays}j total
+                        </span>
+                      )}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Optionnel — créées avec le projet</p>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-0.5">Optionnel — créées avec le projet</p>
               </div>
 
-              {/* Liste tâches formulaire */}
-              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
+              {/* Liste des tâches ajoutées */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
                 {formTasks.length === 0 && (
-                  <p className="text-xs text-gray-400 italic text-center py-6">
-                    Ajoutez des tâches ci-dessous
+                  <p className="text-xs text-gray-400 italic text-center py-8">
+                    Utilisez le formulaire ci-dessous pour ajouter des tâches
                   </p>
                 )}
-                {formTasks.map((task) => (
+                {formTasks.map((task, idx) => (
                   <div
                     key={task.id}
-                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 bg-white border border-gray-200"
+                    className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-1.5"
                   >
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
-                    <span className="flex-1 text-xs text-gray-700 leading-snug">{task.title}</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex-shrink-0">
-                      {task.duration_days}j
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveFormTask(task.id)}
-                      className="text-gray-300 hover:text-red-400 text-xs flex-shrink-0"
-                    >✕</button>
+                    {/* Ligne principale */}
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                        {idx + 1}
+                      </span>
+                      <span className="flex-1 text-sm font-medium text-gray-800 leading-snug">{task.title}</span>
+                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded flex-shrink-0">
+                        {task.duration_days}j
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveFormTask(task.id)}
+                        className="text-gray-300 hover:text-red-400 flex-shrink-0 text-base leading-none"
+                        title="Supprimer"
+                      >✕</button>
+                    </div>
+                    {/* Infos secondaires */}
+                    <div className="pl-8 flex flex-wrap gap-x-3 gap-y-0.5">
+                      {(task.start_date || task.due_date) && (
+                        <span className="text-xs text-gray-400">
+                          📅 {task.start_date || '?'}{task.due_date ? ` → ${task.due_date}` : ''}
+                        </span>
+                      )}
+                      {(task.earliest_start || task.latest_end) && (
+                        <span className="text-xs text-purple-500">
+                          ⏰ {task.earliest_start && `≥ ${task.earliest_start}`}{task.earliest_start && task.latest_end && ' · '}{task.latest_end && `≤ ${task.latest_end}`}
+                        </span>
+                      )}
+                      {task.depends_on && (
+                        <span className="text-xs text-orange-500">
+                          ⛓ après «{taskTitle(task.depends_on)}»
+                        </span>
+                      )}
+                      {task.assigned_to && (
+                        <span className="text-xs text-indigo-500">
+                          👤 {userName(task.assigned_to)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
 
-              {/* Formulaire ajout tâche */}
-              <div className="flex-shrink-0 px-3 py-3 border-t border-gray-200 bg-white">
-                <form onSubmit={handleAddFormTask} className="space-y-2">
-                  <input
-                    type="text"
-                    value={newTaskInput.title}
-                    onChange={(e) => setNewTaskInput((p) => ({ ...p, title: e.target.value }))}
-                    placeholder="Titre de la tâche..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                  <div className="flex gap-2 items-center">
-                    <label className="text-xs text-gray-500 flex-shrink-0">Durée :</label>
+              {/* ── Formulaire ajout tâche ── */}
+              <div className="flex-shrink-0 border-t border-gray-200 bg-white">
+                <form onSubmit={handleAddFormTask} className="px-4 py-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nouvelle tâche</p>
+
+                  {/* Titre + durée */}
+                  <div className="flex gap-3">
                     <input
-                      type="number"
-                      min="0"
-                      value={newTaskInput.duration_days}
-                      onChange={(e) => setNewTaskInput((p) => ({ ...p, duration_days: e.target.value }))}
-                      className="w-16 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      type="text"
+                      value={newTaskInput.title}
+                      onChange={(e) => setTask('title', e.target.value)}
+                      placeholder="Titre de la tâche *"
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
-                    <span className="text-xs text-gray-400">jours</span>
-                    <button
-                      type="submit"
-                      className="ml-auto bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      + Ajouter
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        value={newTaskInput.duration_days}
+                        onChange={(e) => setTask('duration_days', e.target.value)}
+                        className="w-16 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <span className="text-xs text-gray-400">j</span>
+                    </div>
                   </div>
+
+                  {/* Dates planifiées */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Début{minStart && <span className="text-orange-400 ml-1">min {minStart}</span>}
+                      </label>
+                      <input
+                        type="date"
+                        value={newTaskInput.start_date}
+                        min={minStart}
+                        onChange={(e) => setTask('start_date', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Fin</label>
+                      <input
+                        type="date"
+                        value={newTaskInput.due_date}
+                        min={newTaskInput.start_date || minStart}
+                        onChange={(e) => setTask('due_date', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Contraintes au plus tôt / au plus tard */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Au plus tôt</label>
+                      <input
+                        type="date"
+                        value={newTaskInput.earliest_start}
+                        onChange={(e) => setTask('earliest_start', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Au plus tard</label>
+                      <input
+                        type="date"
+                        value={newTaskInput.latest_end}
+                        onChange={(e) => setTask('latest_end', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dépend de + Assignée à */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Tâche précédente</label>
+                      <select
+                        value={newTaskInput.depends_on}
+                        onChange={(e) => setTask('depends_on', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        disabled={availableDeps.length === 0}
+                      >
+                        <option value="">— aucune —</option>
+                        {availableDeps.map((t) => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Assignée à</label>
+                      <select
+                        value={newTaskInput.assigned_to}
+                        onChange={(e) => setTask('assigned_to', e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        disabled={assignableUsers.length === 0}
+                      >
+                        <option value="">— non assignée —</option>
+                        {assignableUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.username}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+                  >
+                    + Ajouter la tâche
+                  </button>
                 </form>
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         <div className="flex-shrink-0 px-6 py-4 border-t border-gray-200 flex justify-end gap-3 bg-white">
           <button
             type="button"

@@ -27,6 +27,7 @@ export default function ProjectModal({ projectId, onClose }) {
   const [showEdit, setShowEdit]     = useState(false)
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
+  const [taskError, setTaskError]   = useState(null)
 
   const { deleteProject } = useProjectStore()
   const user = useAuthStore((s) => s.user)
@@ -183,18 +184,23 @@ export default function ProjectModal({ projectId, onClose }) {
 
   async function handleSaveTask(e) {
     e.preventDefault()
-    const updated = await taskService.update(projectId, editingTaskId, {
-      title: editingTask.title.trim(),
-      duration_days: Math.max(0, Number(editingTask.duration_days) || 1),
-      start_date: editingTask.start_date || null,
-      due_date: editingTask.due_date || null,
-      depends_on: editingTask.depends_on ? Number(editingTask.depends_on) : null,
-      assigned_to: editingTask.assigned_to ? Number(editingTask.assigned_to) : null,
-      earliest_start: editingTask.earliest_start || null,
-      latest_end:     editingTask.latest_end || null,
-    })
-    setTasks((prev) => prev.map((t) => (t.id === editingTaskId ? updated : t)))
-    setEditingTaskId(null)
+    setTaskError(null)
+    try {
+      const updated = await taskService.update(projectId, editingTaskId, {
+        title: editingTask.title.trim(),
+        duration_days: Math.max(0, Number(editingTask.duration_days) || 1),
+        start_date: editingTask.start_date || null,
+        due_date: editingTask.due_date || null,
+        depends_on: editingTask.depends_on ? Number(editingTask.depends_on) : null,
+        assigned_to: editingTask.assigned_to ? Number(editingTask.assigned_to) : null,
+        earliest_start: editingTask.earliest_start || null,
+        latest_end:     editingTask.latest_end || null,
+      })
+      setTasks((prev) => prev.map((t) => (t.id === editingTaskId ? updated : t)))
+      setEditingTaskId(null)
+    } catch (err) {
+      setTaskError(err.response?.data?.error || 'Erreur lors de la sauvegarde')
+    }
   }
 
   if (loading) {
@@ -654,11 +660,14 @@ export default function ProjectModal({ projectId, onClose }) {
                               </select>
                             </div>
                           )}
+                          {taskError && (
+                            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">{taskError}</p>
+                          )}
                           <div className="flex gap-2">
                             <button type="submit"
                               className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-2 py-1.5 rounded-lg transition-colors"
                             >Enregistrer</button>
-                            <button type="button" onClick={() => setEditingTaskId(null)}
+                            <button type="button" onClick={() => { setEditingTaskId(null); setTaskError(null) }}
                               className="flex-1 border border-gray-300 text-gray-500 hover:bg-gray-50 text-xs px-2 py-1.5 rounded-lg transition-colors"
                             >Annuler</button>
                           </div>

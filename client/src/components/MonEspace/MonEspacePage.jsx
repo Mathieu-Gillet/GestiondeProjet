@@ -105,12 +105,12 @@ function TaskItem({ task, taskNum, onCycleStatus, user }) {
   const overdue = isOverdue(task.due_date) && task.status !== 'done'
 
   return (
-    <div className={`rounded-lg border px-3 py-2 transition-colors ${
+    <div className={`rounded-lg border px-4 py-3 transition-colors ${
       task.status === 'done' ? 'border-gray-100 bg-gray-50/50 opacity-70' : 'border-gray-200 bg-white'
     }`}>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {/* Numéro */}
-        <span className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+        <span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
           task.status === 'done' ? 'bg-gray-100 text-gray-400' :
           task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
           'bg-gray-100 text-gray-600'
@@ -123,13 +123,13 @@ function TaskItem({ task, taskNum, onCycleStatus, user }) {
           onClick={() => onCycleStatus(task)}
           title={`Statut : ${cfg.label}`}
           className={`flex-shrink-0 rounded-full border-2 flex items-center justify-center font-bold transition-all ${cfg.cls}`}
-          style={{ width: 22, height: 22, fontSize: 12 }}
+          style={{ width: 26, height: 26, fontSize: 14 }}
         >
           {cfg.icon}
         </button>
 
         {/* Titre */}
-        <span className={`flex-1 text-sm ${
+        <span className={`flex-1 text-base ${
           task.status === 'done' ? 'line-through text-gray-400' :
           task.status === 'in_progress' ? 'text-blue-700 font-medium' : 'text-gray-800'
         }`}>
@@ -138,7 +138,7 @@ function TaskItem({ task, taskNum, onCycleStatus, user }) {
 
         {/* Date */}
         {task.due_date && (
-          <span className={`text-xs flex-shrink-0 ${overdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+          <span className={`text-sm flex-shrink-0 ${overdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
             {overdue ? '⚠ ' : ''}{formatDate(task.due_date)}
           </span>
         )}
@@ -166,31 +166,31 @@ function ProjectAccordion({ project, tasks, onOpenModal, onCycleStatus, user }) 
       {/* En-tête projet (cliquable) */}
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+        className="w-full flex items-center gap-4 px-6 py-4 text-left"
       >
         {/* Flèche */}
-        <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
+        <svg className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="currentColor" viewBox="0 0 20 20">
           <path d="M6 6l8 4-8 4V6z" />
         </svg>
 
         {/* Dot priorité */}
-        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${prioCfg.dot || 'bg-gray-300'}`} />
+        <div className={`w-3 h-3 rounded-full flex-shrink-0 ${prioCfg.dot || 'bg-gray-300'}`} />
 
         {/* Titre */}
-        <span className="flex-1 font-semibold text-gray-900 text-sm text-left">{project.title}</span>
+        <span className="flex-1 font-semibold text-gray-900 text-base text-left">{project.title}</span>
 
         {/* Badges */}
-        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${poleCfg.color || ''}`}>{poleCfg.label || project.pole}</span>
-        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${statusCfg.color || ''}`}>{statusCfg.label || project.status}</span>
+        <span className={`text-xs font-medium px-3 py-1 rounded-full ${poleCfg.color || ''}`}>{poleCfg.label || project.pole}</span>
+        <span className={`text-xs font-medium px-3 py-1 rounded-full ${statusCfg.color || ''}`}>{statusCfg.label || project.status}</span>
 
         {/* Tâches count + progress */}
         {totalTasks > 0 && (
-          <span className="text-xs text-gray-400 flex-shrink-0">{doneTasks}/{totalTasks}</span>
+          <span className="text-sm text-gray-400 flex-shrink-0">{doneTasks}/{totalTasks}</span>
         )}
 
         {/* Dates */}
         {(project.start_date || project.due_date) && (
-          <span className={`text-xs flex-shrink-0 ${overdue ? 'text-red-500' : 'text-gray-400'}`}>
+          <span className={`text-sm flex-shrink-0 ${overdue ? 'text-red-500' : 'text-gray-400'}`}>
             {project.start_date && formatDate(project.start_date)}
             {project.start_date && project.due_date && ' → '}
             {project.due_date && formatDate(project.due_date)}
@@ -200,7 +200,7 @@ function ProjectAccordion({ project, tasks, onOpenModal, onCycleStatus, user }) 
         {/* Bouton ouvrir fiche */}
         <span
           onClick={(e) => { e.stopPropagation(); onOpenModal(project.id) }}
-          className="text-[10px] text-indigo-500 hover:text-indigo-700 border border-indigo-200 rounded px-1.5 py-0.5 flex-shrink-0 hover:bg-indigo-50 transition-colors"
+          className="text-xs text-indigo-500 hover:text-indigo-700 border border-indigo-200 rounded px-3 py-1 flex-shrink-0 hover:bg-indigo-50 transition-colors"
         >
           Ouvrir
         </span>
@@ -208,8 +208,8 @@ function ProjectAccordion({ project, tasks, onOpenModal, onCycleStatus, user }) 
 
       {/* Barre de progression */}
       {totalTasks > 0 && (
-        <div className="px-4 pb-1">
-          <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+        <div className="px-6 pb-2">
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
           </div>
         </div>
@@ -217,7 +217,7 @@ function ProjectAccordion({ project, tasks, onOpenModal, onCycleStatus, user }) 
 
       {/* Tâches (expanded) */}
       {expanded && (
-        <div className="px-3 pb-3 pt-1 space-y-2">
+        <div className="px-4 pb-4 pt-2 space-y-2">
           {tasks.length === 0 ? (
             <p className="text-xs text-gray-400 italic text-center py-2">Aucune tâche assignée</p>
           ) : (
@@ -280,16 +280,16 @@ export default function MonEspacePage() {
   const loading      = loadingProj || loadingTasks
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="w-full">
       {/* En-tête */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-lg uppercase">
+        <div className="flex items-center gap-4 mb-5">
+          <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-2xl uppercase">
             {user?.username?.[0]}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{user?.username}</h1>
-            <p className="text-sm text-gray-500 capitalize">
+            <h1 className="text-2xl font-bold text-gray-900">{user?.username}</h1>
+            <p className="text-base text-gray-500 capitalize">
               {user?.role === 'admin' ? 'Administrateur' : user?.role === 'lead' ? 'Responsable' : 'Membre'}
               {user?.pole ? ` · Pôle ${POLE_CONFIG[user.pole]?.label || user.pole}` : ''}
             </p>
@@ -354,7 +354,7 @@ export default function MonEspacePage() {
 
       {/* Liste projets accordion */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+        <h2 className="text-base font-semibold text-gray-500 uppercase tracking-wider mb-4">
           Mes projets & tâches
         </h2>
 

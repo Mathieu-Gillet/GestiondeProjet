@@ -119,7 +119,7 @@ function update(req, res) {
     return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
   }
 
-  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, earliest_start, latest_end } = result.data;
+  const { title, duration_days, status, start_date, due_date, depends_on, assigned_to, notes, earliest_start, latest_end } = result.data;
 
   // Validation dates
   if (start_date || due_date) {
