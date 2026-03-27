@@ -1,0 +1,21 @@
+node_modules/
+server/data/
+server/.env
+docker/.env
+client/dist/
+.DS_Store
+Thumbs.db
+*.db
+*.db-shm
+*.db-wal
+*.log
+npm-debug.log*
+.vscode/
+.idea/
+coverage/
+
+# Dossier local Claude Code
+.claude/
+
+# Dossiers annexes hors projet
+learning-area/

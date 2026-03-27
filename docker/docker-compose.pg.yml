@@ -1,0 +1,68 @@
+# ─── Option B — PostgreSQL, deux conteneurs ────────────────────────────────────
+# Usage :
+#   cp docker/.env.example docker/.env   # puis éditer JWT_SECRET + variables POSTGRES_*
+#   docker compose -f docker/docker-compose.pg.yml up -d
+#
+# Note : cette option nécessite de basculer le backend vers le driver pg.
+#        Voir server/src/db/database.js — actuellement en SQLite (Option A).
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: it-project-tracker:latest
+    container_name: it-tracker
+    restart: unless-stopped
+
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # Connexion PostgreSQL
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tracker}:${POSTGRES_PASSWORD:-tracker}@db:5432/${POSTGRES_DB:-tracker}
+
+      JWT_SECRET: ${JWT_SECRET:?Définir JWT_SECRET dans docker/.env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      SEED_ADMIN_USER: ${SEED_ADMIN_USER:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/auth/me || true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    container_name: it-tracker-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tracker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tracker}
+      POSTGRES_DB: ${POSTGRES_DB:-tracker}
+
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-tracker}", "-d", "${POSTGRES_DB:-tracker}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:
+    driver: local
