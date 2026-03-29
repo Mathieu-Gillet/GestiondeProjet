@@ -10,6 +10,7 @@ import useAuthStore from '../../store/authStore'
 import { SERVICE_CONFIG, VALID_SERVICES, PRIORITY_CONFIG, STATUS_CONFIG } from '../../utils/format'
 import ProjectModal from '../Project/ProjectModal'
 import { taskService } from '../../services/taskService'
+import { projectService } from '../../services/projectService'
 
 const MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
 const MONTHS_FULL  = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
@@ -250,8 +251,10 @@ function TasksEmptyRow({ tasks }) {
 
 // ─── Ligne projet — barre Gantt avec poignées ─────────────────────────────────
 
-function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onToggleExpand, onProjectClick, drag, canDrag, isExpanded, firstVisibleMonth, numVisibleMonths }) {
+function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onToggleExpand, onProjectClick, drag, canDrag, isExpanded, firstVisibleMonth, numVisibleMonths, canLink, linkingFrom, onStartLink, onConfirmLink, rowRef }) {
   const isDragging = drag?.project.id === project.id
+  const isLinkSource = linkingFrom === project.id
+  const isLinkTarget = linkingFrom && linkingFrom !== project.id
 
   const span = getSpan(project, year)
   if (!span) return null
@@ -297,7 +300,15 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
   const hasAllDates = span.hasStart && span.hasEnd
 
   return (
-    <div className={`flex items-center min-h-[4.5rem] border-b border-gray-100 last:border-0 transition-colors ${isExpanded ? 'bg-indigo-50/30' : 'hover:bg-gray-50/40'} group`}>
+    <div
+      ref={rowRef}
+      onClick={isLinkTarget ? () => onConfirmLink(project.id) : undefined}
+      className={`flex items-center min-h-[4.5rem] border-b border-gray-100 last:border-0 transition-colors group ${
+        isLinkSource ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-300' :
+        isLinkTarget ? 'hover:bg-green-50/40 cursor-crosshair' :
+        isExpanded   ? 'bg-indigo-50/30' : 'hover:bg-gray-50/40'
+      }`}
+    >
       {/* Label gauche */}
       <div className="w-56 flex-shrink-0 flex items-start gap-2 px-3 py-2 overflow-hidden">
         {/* Bouton expand tâches */}
@@ -449,6 +460,32 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
             </span>
           )}
         </div>
+
+        {/* Bouton de liaison (admin/lead uniquement) */}
+        {canLink && span.hasEnd && !isDragging && !isLinkTarget && (
+          <button
+            className="absolute top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-20 w-5 h-5 rounded-full bg-white border-2 border-indigo-400 text-indigo-500 hover:bg-indigo-50 hover:border-indigo-600 hover:text-indigo-700 shadow flex items-center justify-center"
+            style={{ left: `${barRightPct}%`, transform: 'translateY(-50%) translateX(6px)', cursor: 'crosshair' }}
+            onClick={(e) => { e.stopPropagation(); onStartLink(project.id) }}
+            title="Lier ce projet (dépendance Fin-à-Début)"
+          >
+            <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </button>
+        )}
+
+        {/* Anneau vert sur la cible potentielle */}
+        {isLinkTarget && span.hasStart && (
+          <div
+            className="absolute top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-green-100 border-2 border-green-500 flex items-center justify-center z-20 pointer-events-none"
+            style={{ left: `${barLeftPct}%`, transform: 'translateY(-50%) translateX(-10px)' }}
+          >
+            <svg className="w-2.5 h-2.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -534,11 +571,25 @@ export default function CalendarPage() {
   const { projects, fetchProjects, updateProject, filters } = useProjectStore()
   const user    = useAuthStore((s) => s.user)
   const canDrag = user?.role === 'admin' || user?.role === 'lead'
+  const canLink = canDrag
   const timelineRef = useRef()
+  const rowsBodyRef = useRef()
+  const rowRefs     = useRef(new Map())
+
+  const [linkingFrom, setLinkingFrom]   = useState(null)
+  const [arrowPaths,  setArrowPaths]    = useState([])
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   useEffect(() => { fetchProjects() }, [])
+
+  // Annuler la liaison avec Escape
+  useEffect(() => {
+    if (!linkingFrom) return
+    const onKey = (e) => { if (e.key === 'Escape') setLinkingFrom(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [linkingFrom])
 
   const filteredProjects = projects.filter(
     (p) => p.status !== 'done' && (filters.service === 'all' || p.service === filters.service)
@@ -556,6 +607,29 @@ export default function CalendarPage() {
     return plannedProjects
       .filter((p) => p.service === service)
       .sort((a, b) => (a.start_date || a.due_date || '') < (b.start_date || b.due_date || '') ? -1 : 1)
+  }
+
+  // ─── Dépendances entre projets ────────────────────────────────────────────
+
+  function handleStartLink(projectId) {
+    setLinkingFrom(projectId)
+  }
+
+  async function handleConfirmLink(targetId) {
+    if (!linkingFrom || linkingFrom === targetId) { setLinkingFrom(null); return }
+    try {
+      await projectService.addDependency(linkingFrom, targetId)
+      await fetchProjects()
+    } catch (_) { /* ignore */ }
+    setLinkingFrom(null)
+  }
+
+  async function handleRemoveArrow(fromId, toId) {
+    if (!window.confirm('Supprimer cette dépendance ?')) return
+    try {
+      await projectService.removeDependency(fromId, toId)
+      await fetchProjects()
+    } catch (_) { /* ignore */ }
   }
 
   // ─── Toggle expansion tâches ──────────────────────────────────────────────
@@ -724,6 +798,65 @@ export default function CalendarPage() {
   }
 
 
+  // ─── Calcul des flèches SVG de dépendance ────────────────────────────────
+  // Clé stable (primitive) pour éviter une boucle infinie due aux nouvelles
+  // références d'array créées à chaque render par plannedProjects.
+  const arrowDepsKey = projects
+    .filter((p) => p.successors?.length)
+    .map((p) => `${p.id}:${p.successors.join(',')}:${p.start_date}:${p.due_date}`)
+    .join('|') + `|${year}|${firstVisibleMonth}|${numVisibleMonths}`
+
+  useEffect(() => {
+    if (!rowsBodyRef.current) return
+
+    // Délai minimal pour que le DOM soit peint et les refs correctement placées
+    const id = requestAnimationFrame(() => {
+      if (!rowsBodyRef.current) return
+      const containerRect = rowsBodyRef.current.getBoundingClientRect()
+      const timelineWidth = containerRect.width - 224 // largeur après la sidebar w-56
+
+      const paths = []
+
+      for (const project of plannedProjects) {
+        if (!project.successors?.length) continue
+        const fromSpan = getSpan(project, year)
+        if (!fromSpan) continue
+        const fromEl = rowRefs.current.get(project.id)
+        if (!fromEl) continue
+
+        const fromRect  = fromEl.getBoundingClientRect()
+        const y1 = fromRect.top + fromRect.height / 2 - containerRect.top
+
+        const clampedEnd  = Math.min(fromSpan.endMonth, firstVisibleMonth + numVisibleMonths - 1)
+        const barRightPct = Math.max(0, Math.min(100, ((clampedEnd + 1 - firstVisibleMonth) / numVisibleMonths) * 100))
+        const x1 = 224 + (barRightPct / 100) * timelineWidth
+
+        for (const toId of project.successors) {
+          const toProject = plannedProjects.find((p) => p.id === toId)
+          if (!toProject) continue
+          const toSpan = getSpan(toProject, year)
+          if (!toSpan) continue
+          const toEl = rowRefs.current.get(toId)
+          if (!toEl) continue
+
+          const toRect = toEl.getBoundingClientRect()
+          const y2 = toRect.top + toRect.height / 2 - containerRect.top
+
+          const clampedStart = Math.max(toSpan.startMonth, firstVisibleMonth)
+          const barLeftPct   = Math.max(0, Math.min(100, ((clampedStart - firstVisibleMonth) / numVisibleMonths) * 100))
+          const x2 = 224 + (barLeftPct / 100) * timelineWidth
+
+          const offset = 14
+          const d = `M ${x1} ${y1} h ${offset} V ${y2} H ${x2}`
+          paths.push({ d, key: `${project.id}-${toId}`, fromId: project.id, toId })
+        }
+      }
+      setArrowPaths(paths)
+    })
+    return () => cancelAnimationFrame(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arrowDepsKey])
+
   // ─── Rendu ────────────────────────────────────────────────────────────────
 
   function renderServiceSection(service, isFirst) {
@@ -774,6 +907,11 @@ export default function CalendarPage() {
                 isExpanded={isExpanded}
                 firstVisibleMonth={firstVisibleMonth}
                 numVisibleMonths={numVisibleMonths}
+                canLink={canLink}
+                linkingFrom={linkingFrom}
+                onStartLink={handleStartLink}
+                onConfirmLink={handleConfirmLink}
+                rowRef={(el) => el ? rowRefs.current.set(p.id, el) : rowRefs.current.delete(p.id)}
               />
 
               {/* Sous-lignes tâches */}
@@ -905,6 +1043,22 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Banner mode liaison */}
+      {linkingFrom && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium flex-shrink-0">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+          <span>Cliquez sur le projet successeur pour créer la dépendance</span>
+          <button
+            onClick={() => setLinkingFrom(null)}
+            className="ml-auto text-indigo-200 hover:text-white transition-colors text-xs underline"
+          >
+            Annuler (Échap)
+          </button>
+        </div>
+      )}
+
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
 
@@ -929,7 +1083,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Corps */}
-            <div className="relative">
+            <div className="relative" ref={rowsBodyRef}>
               {/* Colonnes fond */}
               {Array.from({ length: numVisibleMonths }, (_, i) => {
                 const mi = firstVisibleMonth + i
@@ -954,6 +1108,46 @@ export default function CalendarPage() {
                 <>
                   {VALID_SERVICES.map((svc, i) => renderServiceSection(svc, i === 0 || VALID_SERVICES.slice(0, i).every((s) => projectsByService(s).length === 0)))}
                 </>
+              )}
+
+              {/* SVG overlay — flèches de dépendance */}
+              {arrowPaths.length > 0 && (
+                <svg
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ width: '100%', height: '100%', overflow: 'visible' }}
+                >
+                  <defs>
+                    <marker id="dep-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+                      <path d="M0,0 L0,7 L7,3.5 z" fill="#6366F1" opacity="0.8" />
+                    </marker>
+                  </defs>
+                  {arrowPaths.map(({ d, key, fromId, toId }) => (
+                    <g key={key} style={{ pointerEvents: canLink ? 'auto' : 'none' }}>
+                      {/* Zone cliquable transparente pour la suppression */}
+                      {canLink && (
+                        <path
+                          d={d}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth={12}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleRemoveArrow(fromId, toId)}
+                        />
+                      )}
+                      {/* Flèche visible */}
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="#6366F1"
+                        strokeWidth={1.5}
+                        strokeDasharray="5,3"
+                        opacity={0.75}
+                        markerEnd="url(#dep-arrow)"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    </g>
+                  ))}
+                </svg>
               )}
             </div>
           </div>

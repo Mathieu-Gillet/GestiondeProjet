@@ -14,4 +14,8 @@ export const projectService = {
   deleteComment: (projectId, commentId) =>
     api.delete(`/projects/${projectId}/comments/${commentId}`).then((r) => r.data),
   getActivity: (id) => api.get(`/projects/${id}/activity`).then((r) => r.data),
+  addDependency: (fromId, toId) =>
+    api.post(`/projects/${fromId}/dependencies/${toId}`).then((r) => r.data),
+  removeDependency: (fromId, toId) =>
+    api.delete(`/projects/${fromId}/dependencies/${toId}`).then((r) => r.data),
 }

@@ -22,7 +22,7 @@ export default function ArchivesPage() {
   // Projets terminés, filtrés par pôle
   const done = projects.filter((p) => {
     if (p.status !== 'done') return false
-    if (filters.pole !== 'all' && p.pole !== filters.pole) return false
+    if (filters.service !== 'all' && p.service !== filters.service) return false
     return true
   })
 

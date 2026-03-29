@@ -112,6 +112,33 @@ db.exec(`
 `);
 
 // Migration : ajout des colonnes tâches (idempotent)
+// Migration : table task_date_requests (idempotent)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS task_date_requests (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id            INTEGER NOT NULL REFERENCES tasks(id)    ON DELETE CASCADE,
+    project_id         INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    requested_by       INTEGER NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+    current_start_date TEXT,
+    current_due_date   TEXT,
+    new_start_date     TEXT,
+    new_due_date       TEXT,
+    reason             TEXT,
+    status             TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+    response_note      TEXT,
+    created_at         DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Table dépendances entre projets (Fin-à-Début)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS project_dependencies (
+    from_project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    to_project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    PRIMARY KEY (from_project_id, to_project_id)
+  );
+`);
+
 const taskMigrations = [
   'ALTER TABLE tasks ADD COLUMN start_date DATE',
   'ALTER TABLE tasks ADD COLUMN due_date DATE',

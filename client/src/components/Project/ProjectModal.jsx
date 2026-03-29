@@ -659,20 +659,26 @@ export default function ProjectModal({ projectId, onClose }) {
                               </select>
                             </div>
                           )}
-                          {project.members?.length > 0 && (
-                            <div>
-                              <label className="text-[10px] text-gray-400 block mb-0.5">Assignée à :</label>
-                              <select value={editingTask.assigned_to}
-                                onChange={(e) => setEditingTask((p) => ({ ...p, assigned_to: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              >
-                                <option value="">— non assignée —</option>
-                                {project.members.map((m) => (
-                                  <option key={m.id} value={m.id}>{m.username}</option>
-                                ))}
-                              </select>
-                            </div>
-                          )}
+                          {(() => {
+                            const assignable = [
+                              ...(project.owner ? [project.owner] : []),
+                              ...(project.members || []).filter((m) => m.id !== project.owner?.id),
+                            ]
+                            return assignable.length > 0 ? (
+                              <div>
+                                <label className="text-[10px] text-gray-400 block mb-0.5">Assignée à :</label>
+                                <select value={editingTask.assigned_to}
+                                  onChange={(e) => setEditingTask((p) => ({ ...p, assigned_to: e.target.value }))}
+                                  className="w-full border border-gray-300 rounded px-1.5 py-1 text-[10px] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                  <option value="">— non assignée —</option>
+                                  {assignable.map((u) => (
+                                    <option key={u.id} value={u.id}>{u.username}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ) : null
+                          })()}
                           <div>
                             <label className="text-[10px] text-gray-400 block mb-0.5">Description / Notes</label>
                             <textarea
@@ -952,21 +958,27 @@ export default function ProjectModal({ projectId, onClose }) {
                         </select>
                       </div>
                     )}
-                    {project.members?.length > 0 && (
-                      <div>
-                        <label className="text-[10px] text-gray-400 block mb-0.5">Assignée à :</label>
-                        <select
-                          value={newTask.assigned_to}
-                          onChange={(e) => setNewTask((p) => ({ ...p, assigned_to: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">— non assignée —</option>
-                          {project.members.map((m) => (
-                            <option key={m.id} value={m.id}>{m.username}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    {(() => {
+                      const assignable = [
+                        ...(project.owner ? [project.owner] : []),
+                        ...(project.members || []).filter((m) => m.id !== project.owner?.id),
+                      ]
+                      return assignable.length > 0 ? (
+                        <div>
+                          <label className="text-[10px] text-gray-400 block mb-0.5">Assignée à :</label>
+                          <select
+                            value={newTask.assigned_to}
+                            onChange={(e) => setNewTask((p) => ({ ...p, assigned_to: e.target.value }))}
+                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            <option value="">— non assignée —</option>
+                            {assignable.map((u) => (
+                              <option key={u.id} value={u.id}>{u.username}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : null
+                    })()}
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-0.5">Description / Notes</label>
                       <textarea

@@ -32,13 +32,13 @@ function fetchTask(db, taskId) {
 }
 
 // ── Helper : créer une notification ─────────────────────────────────────────
-function createNotification(db, { userId, projectId, taskId, fromUserId, message }) {
+function createNotification(db, { userId, projectId, taskId, fromUserId, type = 'task_status_changed', message }) {
   const info = db.prepare(`
     INSERT INTO notifications (user_id, project_id, task_id, from_user_id, type, message)
-    VALUES (?, ?, ?, ?, 'task_status_changed', ?)
-  `).run(userId, projectId, taskId, fromUserId, message);
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(userId, projectId, taskId, fromUserId, type, message);
   broadcastToUser(userId, 'notification', {
-    id: info.lastInsertRowid, message, project_id: projectId, task_id: taskId,
+    id: info.lastInsertRowid, message, project_id: projectId, task_id: taskId, type,
   });
 }
 
@@ -101,6 +101,20 @@ function create(req, res) {
       earliest_start ?? null, latest_end ?? null);
 
   const task = fetchTask(db, info.lastInsertRowid);
+
+  // Notification si une tâche est assignée à quelqu'un d'autre que le créateur
+  if (assigned_to && assigned_to !== req.user.id) {
+    const fromUser = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
+    createNotification(db, {
+      userId: assigned_to,
+      projectId: Number(req.params.id),
+      taskId: Number(info.lastInsertRowid),
+      fromUserId: req.user.id,
+      type: 'task_assigned',
+      message: `${fromUser?.username || 'Un responsable'} vous a assigné la tâche « ${title} » (${project.title})`,
+    });
+  }
+
   broadcast('tasks_updated', { project_id: Number(req.params.id) });
   res.status(201).json(task);
 }
@@ -164,9 +178,10 @@ function update(req, res) {
     db.prepare(`UPDATE tasks SET ${changes.join(', ')} WHERE id = ?`).run(...params);
   }
 
-  // Notification si statut changé
+  const project = db.prepare('SELECT owner_id, title FROM projects WHERE id = ?').get(req.params.id);
+
+  // Notification si statut changé → prévenir le responsable du projet
   if (status !== undefined && status !== task.status && req.user) {
-    const project = db.prepare('SELECT owner_id, title FROM projects WHERE id = ?').get(req.params.id);
     if (project?.owner_id && project.owner_id !== req.user.id) {
       const fromUser = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
       const message = `${fromUser?.username || 'Un membre'} a changé le statut de « ${task.title} » : ${STATUS_LABELS[task.status]} → ${STATUS_LABELS[status]} (${project.title})`;
@@ -175,9 +190,23 @@ function update(req, res) {
         projectId: Number(req.params.id),
         taskId: Number(req.params.taskId),
         fromUserId: req.user.id,
+        type: 'task_status_changed',
         message,
       });
     }
+  }
+
+  // Notification si assignation changée → prévenir le nouvel assigné
+  if (assigned_to !== undefined && assigned_to !== null && assigned_to !== task.assigned_to && assigned_to !== req.user.id) {
+    const fromUser = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
+    createNotification(db, {
+      userId: assigned_to,
+      projectId: Number(req.params.id),
+      taskId: Number(req.params.taskId),
+      fromUserId: req.user.id,
+      type: 'task_assigned',
+      message: `${fromUser?.username || 'Un responsable'} vous a assigné la tâche « ${task.title} » (${project?.title})`,
+    });
   }
 
   const updated = fetchTask(db, req.params.taskId);

@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const ctrl = require('../controllers/projectController');
 const taskCtrl = require('../controllers/taskController');
+const dateRequestCtrl = require('../controllers/dateRequestController');
 
 // Lecture : tous les utilisateurs authentifiés
 router.get('/', authenticate, ctrl.list);
@@ -34,5 +35,13 @@ router.delete('/:id/comments/:commentId', authenticate, ctrl.deleteComment);
 router.get('/:id/tasks/:taskId/comments', authenticate, ctrl.getTaskComments);
 router.post('/:id/tasks/:taskId/comments', authenticate, ctrl.addTaskComment);
 router.delete('/:id/tasks/:taskId/comments/:commentId', authenticate, ctrl.deleteComment);
+
+// Demandes de modification de dates de tâche
+router.post('/:id/tasks/:taskId/date-requests', authenticate, dateRequestCtrl.create);
+router.get('/:id/tasks/:taskId/date-requests',  authenticate, dateRequestCtrl.listForTask);
+
+// Dépendances entre projets (Fin-à-Début) — admin et lead uniquement
+router.post('/:id/dependencies/:toId',   authenticate, requireRole('admin', 'lead'), ctrl.addDependency);
+router.delete('/:id/dependencies/:toId', authenticate, requireRole('admin', 'lead'), ctrl.removeDependency);
 
 module.exports = router;

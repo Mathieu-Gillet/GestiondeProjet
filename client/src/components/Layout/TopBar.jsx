@@ -53,6 +53,7 @@ function NotificationBell() {
   const [notifs, setNotifs] = useState([])
   const [open, setOpen]     = useState(false)
   const dropRef             = useRef(null)
+  const sseSource           = useProjectStore((s) => s._sseSource)
 
   const unread = notifs.filter((n) => !n.read).length
 
@@ -61,16 +62,14 @@ function NotificationBell() {
   }, [])
 
   useEffect(() => {
-    const store = useProjectStore.getState()
-    const es = store._sseSource
-    if (!es) return
+    if (!sseSource) return
     function onNotif(e) {
       const data = JSON.parse(e.data || '{}')
       setNotifs((prev) => [{ ...data, read: 0, created_at: new Date().toISOString() }, ...prev])
     }
-    es.addEventListener('notification', onNotif)
-    return () => es.removeEventListener('notification', onNotif)
-  }, [])
+    sseSource.addEventListener('notification', onNotif)
+    return () => sseSource.removeEventListener('notification', onNotif)
+  }, [sseSource])
 
   useEffect(() => {
     if (!open) return
@@ -170,24 +169,24 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="bg-white h-14 px-4 flex items-center gap-3 flex-shrink-0 border-b border-gray-200">
-        {/* Logo */}
-        <div className="flex items-center gap-2 pr-4 border-r border-gray-200 mr-1">
+      <header className="bg-white h-14 px-6 flex items-center flex-shrink-0 border-b border-gray-200">
+        {/* Logo — zone gauche fixe */}
+        <div className="flex items-center gap-2 pr-5 border-r border-gray-200 flex-shrink-0">
           <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             GP
           </div>
           <span className="font-semibold text-sm text-gray-800 whitespace-nowrap">GProjet</span>
         </div>
 
-        {/* Navigation principale */}
-        <nav className="flex items-center gap-0.5">
+        {/* Navigation principale — centrée */}
+        <nav className="flex items-center gap-1 flex-1 justify-center">
           {NAV_ITEMS.map((item) => {
             const isActive = item.path === '/projects/board' ? isProjectsActive : location.pathname === item.path
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
                   isActive
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -198,17 +197,15 @@ export default function TopBar() {
               </button>
             )
           })}
-        </nav>
 
-        {/* Administration */}
-        {(isAdmin || user?.role === 'lead') && (
-          <>
-            <div className="w-px h-5 bg-gray-200 mx-1" />
-            <nav className="flex items-center gap-0.5">
+          {/* Administration — intégrée dans la nav centrale */}
+          {(isAdmin || user?.role === 'lead') && (
+            <>
+              <div className="w-px h-5 bg-gray-200 mx-1" />
               {isAdmin && (
                 <button
                   onClick={() => navigate('/admin/users')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
                     location.pathname === '/admin/users'
                       ? 'bg-indigo-50 text-indigo-700 font-medium'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -223,7 +220,7 @@ export default function TopBar() {
               )}
               <button
                 onClick={() => navigate('/admin/tags')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap ${
                   location.pathname === '/admin/tags'
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
                     : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -235,11 +232,12 @@ export default function TopBar() {
                 </svg>
                 Tags
               </button>
-            </nav>
-          </>
-        )}
+            </>
+          )}
+        </nav>
 
-        <div className="flex-1" />
+        {/* Zone droite — actions */}
+        <div className="flex items-center gap-3 flex-shrink-0 pl-5 border-l border-gray-200">
 
         {/* Sélecteur de service — admin et Direction Générale uniquement */}
         {canSeeAll && (
@@ -284,7 +282,7 @@ export default function TopBar() {
         <NotificationBell />
 
         {/* Utilisateur + déconnexion */}
-        <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
+        <div className="flex items-center gap-2">
           <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center text-xs font-semibold text-indigo-700 uppercase flex-shrink-0">
             {user?.username?.[0]}
           </div>
@@ -303,6 +301,7 @@ export default function TopBar() {
             </svg>
           </button>
         </div>
+        </div>{/* fin zone droite */}
       </header>
 
       {showForm && <ProjectForm onClose={() => setShowForm(false)} />}

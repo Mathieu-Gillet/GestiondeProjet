@@ -1,6 +1,6 @@
 const { z } = require('zod');
 const { getDb } = require('../db/database');
-const { broadcast } = require('../sse');
+const { broadcast, broadcastToUser } = require('../sse');
 
 const VALID_SERVICES = ['dev', 'network', 'rh', 'direction_generale', 'services_techniques', 'achats'];
 
@@ -103,6 +103,12 @@ function list(req, res) {
     return p;
   });
 
+  // Enrichir avec les dépendances (une seule requête batch)
+  const allDeps = db.prepare('SELECT from_project_id, to_project_id FROM project_dependencies').all();
+  enriched.forEach(p => {
+    p.successors = allDeps.filter(d => d.from_project_id === p.id).map(d => d.to_project_id);
+  });
+
   res.json(enriched);
 }
 
@@ -148,7 +154,22 @@ function create(req, res) {
 
   // Membres
   const insertMember = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
-  for (const uid of member_ids) insertMember.run(projectId, uid);
+  const fromUser = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
+  for (const uid of member_ids) {
+    insertMember.run(projectId, uid);
+    if (uid !== req.user.id) {
+      const notifInfo = db.prepare(`
+        INSERT INTO notifications (user_id, project_id, from_user_id, type, message)
+        VALUES (?, ?, ?, 'project_member_added', ?)
+      `).run(uid, projectId, req.user.id, `${fromUser?.username || 'Un responsable'} vous a ajouté au projet « ${title} »`);
+      broadcastToUser(uid, 'notification', {
+        id: notifInfo.lastInsertRowid,
+        message: `${fromUser?.username || 'Un responsable'} vous a ajouté au projet « ${title} »`,
+        project_id: projectId,
+        type: 'project_member_added',
+      });
+    }
+  }
 
   // Tags
   const insertTag = db.prepare('INSERT OR IGNORE INTO project_tags (project_id, tag_id) VALUES (?, ?)');
@@ -204,9 +225,27 @@ function update(req, res) {
 
   // Mise à jour membres
   if (member_ids !== undefined) {
+    const oldMemberIds = db.prepare('SELECT user_id FROM project_members WHERE project_id = ?')
+      .all(req.params.id).map((r) => r.user_id);
     db.prepare('DELETE FROM project_members WHERE project_id = ?').run(req.params.id);
     const ins = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
-    for (const uid of member_ids) ins.run(req.params.id, uid);
+    const updatedProject = db.prepare('SELECT title FROM projects WHERE id = ?').get(req.params.id);
+    const fromUserForMembers = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
+    for (const uid of member_ids) {
+      ins.run(req.params.id, uid);
+      if (!oldMemberIds.includes(uid) && uid !== req.user.id) {
+        const notifInfo = db.prepare(`
+          INSERT INTO notifications (user_id, project_id, from_user_id, type, message)
+          VALUES (?, ?, ?, 'project_member_added', ?)
+        `).run(uid, req.params.id, req.user.id, `${fromUserForMembers?.username || 'Un responsable'} vous a ajouté au projet « ${updatedProject?.title} »`);
+        broadcastToUser(uid, 'notification', {
+          id: notifInfo.lastInsertRowid,
+          message: `${fromUserForMembers?.username || 'Un responsable'} vous a ajouté au projet « ${updatedProject?.title} »`,
+          project_id: Number(req.params.id),
+          type: 'project_member_added',
+        });
+      }
+    }
   }
 
   // Mise à jour tags
@@ -376,4 +415,27 @@ function getActivity(req, res) {
   res.json(logs);
 }
 
-module.exports = { list, getOne, create, update, remove, move, getComments, addComment, deleteComment, getTaskComments, addTaskComment, getActivity };
+function addDependency(req, res) {
+  const fromId = parseInt(req.params.id, 10);
+  const toId   = parseInt(req.params.toId, 10);
+  if (fromId === toId) return res.status(400).json({ error: 'Un projet ne peut pas dépendre de lui-même' });
+  const db = getDb();
+  try {
+    db.prepare('INSERT OR IGNORE INTO project_dependencies (from_project_id, to_project_id) VALUES (?, ?)').run(fromId, toId);
+    broadcast('project_updated', { id: fromId });
+    res.json({ ok: true });
+  } catch {
+    res.status(400).json({ error: 'Dépendance invalide' });
+  }
+}
+
+function removeDependency(req, res) {
+  const fromId = parseInt(req.params.id, 10);
+  const toId   = parseInt(req.params.toId, 10);
+  const db = getDb();
+  db.prepare('DELETE FROM project_dependencies WHERE from_project_id = ? AND to_project_id = ?').run(fromId, toId);
+  broadcast('project_updated', { id: fromId });
+  res.json({ ok: true });
+}
+
+module.exports = { list, getOne, create, update, remove, move, getComments, addComment, deleteComment, getTaskComments, addTaskComment, getActivity, addDependency, removeDependency };
