@@ -18,12 +18,12 @@ services:
 
     volumes:
       # Persistance de la base SQLite
-      - it-tracker-data:/opt/docker/data/gprojet/
+      - it-tracker-data:/app/data
 
     environment:
       NODE_ENV: production
       PORT: 3000
-      DB_PATH: /var/lib/docker/volumes/gprojet_data/_data/tracker.db
+      DB_PATH: /app/data/tracker.db
 
       # JWT — obligatoire, changer en production
       JWT_SECRET: ${JWT_SECRET:?Définir JWT_SECRET dans docker/.env}

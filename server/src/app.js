@@ -9,7 +9,9 @@ const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : 'http://localhost:5173',
+  origin: process.env.NODE_ENV === 'production'
+    ? (process.env.TRUSTED_ORIGINS ? process.env.TRUSTED_ORIGINS.split(',').map(o => o.trim()) : false)
+    : 'http://localhost:5173',
   credentials: true,
 }));
 app.use(express.json());
