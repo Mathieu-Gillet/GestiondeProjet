@@ -16,10 +16,20 @@ export const loginRequest = {
   scopes: ['User.Read', 'GroupMember.Read.All'],
 }
 
-export const msalInstance = new PublicClientApplication(msalConfig)
+// MSAL nécessite window.crypto.subtle (disponible uniquement en HTTPS ou localhost).
+// On instancie de manière conditionnelle pour éviter un crash en HTTP.
+let msalInstance = null
+try {
+  msalInstance = new PublicClientApplication(msalConfig)
+} catch (e) {
+  console.warn('MSAL non disponible (contexte non sécurisé ou crypto absent) :', e.message)
+}
+
+export { msalInstance }
 
 // Initialisation obligatoire avant tout usage
 export async function initMsal() {
+  if (!msalInstance) return
   await msalInstance.initialize()
   // Gérer la réponse de redirection si elle existe
   await msalInstance.handleRedirectPromise()

@@ -26,6 +26,10 @@ export default function LoginPage() {
   }
 
   async function handleMicrosoftLogin() {
+    if (!msalInstance) {
+      setError('Connexion Microsoft non disponible (HTTPS requis)')
+      return
+    }
     setError('')
     setLoadingAzure(true)
     try {
@@ -60,7 +64,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleMicrosoftLogin}
-          disabled={loadingAzure}
+          disabled={loadingAzure || !msalInstance}
           className="w-full flex items-center justify-center gap-3 border border-gray-300 hover:bg-gray-50 disabled:opacity-60 text-gray-700 font-medium rounded-lg py-2.5 text-sm transition-colors mb-4"
         >
           {/* Logo Microsoft */}
