@@ -33,7 +33,7 @@ services:
       SEED_ADMIN_USER: ${SEED_ADMIN_USER:-admin}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
-      TRUSTED_ORIGINS: "https://projet.groupe-itec.fr"
+      TRUSTED_ORIGINS: "http://projet.groupe-itec.fr"
 
     healthcheck:
       # Vérifie que le serveur répond (401 est attendu sans token)
