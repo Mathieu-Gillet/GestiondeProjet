@@ -1,0 +1,63 @@
+# ─── Option A — SQLite, mono-conteneur (recommandé) ───────────────────────────
+# Usage :
+#   cp docker/.env.example docker/.env   # puis éditer JWT_SECRET
+#   docker compose -f docker/docker-compose.yml up -d
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: it-project-tracker:latest
+    container_name: it-tracker
+    restart: unless-stopped
+
+    ports:
+      # HOST_PORT (défaut 3000) → port interne 3000
+      - "${HOST_PORT:-3000}:3000"
+
+    volumes:
+      # Persistance de la base SQLite
+      - it-tracker-data:/app/data
+
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_PATH: /app/data/tracker.db
+
+      # JWT — obligatoire, changer en production
+      JWT_SECRET: ${JWT_SECRET:?Définir JWT_SECRET dans docker/.env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # Compte administrateur créé au premier démarrage
+      SEED_ADMIN_USER: ${SEED_ADMIN_USER:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@example.com}
+      TRUSTED_ORIGINS: "https://projet.groupe-itec.fr"
+
+      # LDAP / Active Directory
+      LDAP_URL: ${LDAP_URL:-}
+      LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:-}
+      LDAP_USER_SEARCH_BASE: ${LDAP_USER_SEARCH_BASE:-}
+      LDAP_USER_SEARCH_FILTER: ${LDAP_USER_SEARCH_FILTER:-(sAMAccountName={{username}})}
+      LDAP_TLS_REJECT_UNAUTHORIZED: ${LDAP_TLS_REJECT_UNAUTHORIZED:-true}
+      LDAP_GROUP_DEV: ${LDAP_GROUP_DEV:-}
+      LDAP_GROUP_NETWORK: ${LDAP_GROUP_NETWORK:-}
+      LDAP_GROUP_RH: ${LDAP_GROUP_RH:-}
+      LDAP_GROUP_DG: ${LDAP_GROUP_DG:-}
+      LDAP_GROUP_TECH: ${LDAP_GROUP_TECH:-}
+      LDAP_GROUP_ACHATS: ${LDAP_GROUP_ACHATS:-}
+      LDAP_GROUP_ADMIN: ${LDAP_GROUP_ADMIN:-}
+
+    healthcheck:
+      # Vérifie que le serveur répond (401 est attendu sans token)
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/auth/me || true"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+volumes:
+  it-tracker-data:
+    driver: local
