@@ -45,6 +45,7 @@ app.use('/api/tags', require('./routes/tags'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/date-requests', require('./routes/dateRequests'));
 app.use('/api/export',        require('./routes/export'));
+app.use('/api/admin/ldap',   require('./routes/ldapConfig'));
 
 // En production : servir le frontend React compilé
 if (process.env.NODE_ENV === 'production') {

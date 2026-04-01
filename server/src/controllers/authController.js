@@ -31,6 +31,11 @@ function login(req, res) {
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
+  // La connexion locale est réservée au compte admin local (sans ldap_dn)
+  if (user.role !== 'admin' || user.ldap_dn) {
+    return res.status(403).json({ error: 'La connexion locale est réservée au compte administrateur local' });
+  }
+
   const token = issueLocalToken(user);
 
   res.json({

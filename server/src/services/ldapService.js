@@ -1,4 +1,5 @@
 // ldapts is ESM-only (v4+). We load it with dynamic import() from this CJS module.
+const { getDb } = require('../db/database');
 
 // Escape special characters in LDAP filter values (RFC 4515)
 function escapeFilter(str) {
@@ -10,20 +11,33 @@ function escapeFilter(str) {
     .replace(/\0/g, '\\00');
 }
 
+// Lire la configuration LDAP depuis la base de données
+function getLdapConfig() {
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT * FROM ldap_config WHERE id = 1').get();
+    if (row && row.enabled && row.url && row.bind_dn && row.base_dn) {
+      return row;
+    }
+  } catch (_) { /* table pas encore créée */ }
+  return null;
+}
+
 async function authenticateWithLdap(username, password) {
-  if (!process.env.LDAP_URL || !process.env.LDAP_BIND_DN || !process.env.LDAP_BASE_DN) {
+  const cfg = getLdapConfig();
+
+  if (!cfg) {
     throw new Error('LDAP non configuré sur le serveur');
   }
 
   const { Client } = await import('ldapts');
 
-  const tlsOptions =
-    process.env.LDAP_TLS_REJECT_UNAUTHORIZED === 'false'
-      ? { rejectUnauthorized: false }
-      : {};
+  const tlsOptions = cfg.tls_reject_unauthorized === 0
+    ? { rejectUnauthorized: false }
+    : {};
 
   const client = new Client({
-    url: process.env.LDAP_URL,
+    url: cfg.url,
     tlsOptions,
     timeout: 5000,
     connectTimeout: 5000,
@@ -31,12 +45,12 @@ async function authenticateWithLdap(username, password) {
 
   try {
     // 1. Bind avec le compte de service pour chercher l'utilisateur
-    await client.bind(process.env.LDAP_BIND_DN, process.env.LDAP_BIND_PASSWORD || '');
+    await client.bind(cfg.bind_dn, cfg.bind_password || '');
 
     // 2. Rechercher le DN de l'utilisateur
-    const filterTemplate = process.env.LDAP_USER_SEARCH_FILTER || '(sAMAccountName={{username}})';
+    const filterTemplate = cfg.user_search_filter || '(sAMAccountName={{username}})';
     const filter = filterTemplate.replace('{{username}}', escapeFilter(username));
-    const searchBase = process.env.LDAP_USER_SEARCH_BASE || process.env.LDAP_BASE_DN;
+    const searchBase = cfg.user_search_base || cfg.base_dn;
 
     const { searchEntries } = await client.search(searchBase, {
       scope: 'sub',
@@ -71,14 +85,18 @@ async function authenticateWithLdap(username, password) {
 }
 
 function mapLdapGroupsToService(groups) {
+  const cfg = getLdapConfig();
   const groupMap = {};
-  if (process.env.LDAP_GROUP_DEV)     groupMap[process.env.LDAP_GROUP_DEV]     = { service: 'dev' };
-  if (process.env.LDAP_GROUP_NETWORK) groupMap[process.env.LDAP_GROUP_NETWORK] = { service: 'network' };
-  if (process.env.LDAP_GROUP_RH)      groupMap[process.env.LDAP_GROUP_RH]      = { service: 'rh' };
-  if (process.env.LDAP_GROUP_DG)      groupMap[process.env.LDAP_GROUP_DG]      = { service: 'direction_generale' };
-  if (process.env.LDAP_GROUP_TECH)    groupMap[process.env.LDAP_GROUP_TECH]    = { service: 'services_techniques' };
-  if (process.env.LDAP_GROUP_ACHATS)  groupMap[process.env.LDAP_GROUP_ACHATS]  = { service: 'achats' };
-  if (process.env.LDAP_GROUP_ADMIN)   groupMap[process.env.LDAP_GROUP_ADMIN]   = { service: 'dev', role: 'admin' };
+
+  if (cfg) {
+    if (cfg.group_dev)     groupMap[cfg.group_dev]     = { service: 'dev' };
+    if (cfg.group_network) groupMap[cfg.group_network] = { service: 'network' };
+    if (cfg.group_rh)      groupMap[cfg.group_rh]      = { service: 'rh' };
+    if (cfg.group_dg)      groupMap[cfg.group_dg]      = { service: 'direction_generale' };
+    if (cfg.group_tech)    groupMap[cfg.group_tech]    = { service: 'services_techniques' };
+    if (cfg.group_achats)  groupMap[cfg.group_achats]  = { service: 'achats' };
+    if (cfg.group_admin)   groupMap[cfg.group_admin]   = { service: 'dev', role: 'admin' };
+  }
 
   let service = 'dev';
   let role = 'member';
@@ -93,4 +111,31 @@ function mapLdapGroupsToService(groups) {
   return { service, role };
 }
 
-module.exports = { authenticateWithLdap, mapLdapGroupsToService };
+// Tester la connexion LDAP avec une config donnée (sans modifier la DB)
+async function testLdapConnection(cfg) {
+  if (!cfg.url || !cfg.bind_dn || !cfg.base_dn) {
+    throw new Error('Paramètres LDAP incomplets (url, bind_dn, base_dn requis)');
+  }
+
+  const { Client } = await import('ldapts');
+
+  const tlsOptions = cfg.tls_reject_unauthorized === false || cfg.tls_reject_unauthorized === 0
+    ? { rejectUnauthorized: false }
+    : {};
+
+  const client = new Client({
+    url: cfg.url,
+    tlsOptions,
+    timeout: 5000,
+    connectTimeout: 5000,
+  });
+
+  try {
+    await client.bind(cfg.bind_dn, cfg.bind_password || '');
+    return { success: true, message: 'Connexion LDAP réussie' };
+  } finally {
+    await client.unbind();
+  }
+}
+
+module.exports = { authenticateWithLdap, mapLdapGroupsToService, testLdapConnection, getLdapConfig };

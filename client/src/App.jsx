@@ -6,6 +6,7 @@ import CalendarPage from './components/Calendar/CalendarPage'
 import ArchivesPage from './components/Archives/ArchivesPage'
 import AdminUsersPage from './components/Admin/AdminUsersPage'
 import AdminTagsPage from './components/Admin/AdminTagsPage'
+import AdminLdapPage from './components/Admin/AdminLdapPage'
 import MonEspacePage from './components/MonEspace/MonEspacePage'
 import ProjectsLayout from './components/Projects/ProjectsLayout'
 import ListView from './components/List/ListView'
@@ -77,6 +78,16 @@ export default function App() {
             <PrivateRoute>
               <AppShell>
                 <AdminTagsPage />
+              </AppShell>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/admin/ldap"
+          element={
+            <PrivateRoute>
+              <AppShell>
+                <AdminLdapPage />
               </AppShell>
             </PrivateRoute>
           }

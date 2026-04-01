@@ -180,4 +180,31 @@ try {
 } catch (_) { /* ignore */ }
 
 
+// Table de configuration LDAP (ligne unique, id=1)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ldap_config (
+    id                      INTEGER PRIMARY KEY CHECK(id = 1),
+    enabled                 INTEGER NOT NULL DEFAULT 0,
+    url                     TEXT,
+    base_dn                 TEXT,
+    bind_dn                 TEXT,
+    bind_password           TEXT,
+    user_search_base        TEXT,
+    user_search_filter      TEXT NOT NULL DEFAULT '(sAMAccountName={{username}})',
+    tls_reject_unauthorized INTEGER NOT NULL DEFAULT 1,
+    group_dev               TEXT,
+    group_network           TEXT,
+    group_rh                TEXT,
+    group_dg                TEXT,
+    group_tech              TEXT,
+    group_achats            TEXT,
+    group_admin             TEXT,
+    updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+// Initialiser la ligne unique si elle n'existe pas
+try {
+  db.exec(`INSERT OR IGNORE INTO ldap_config (id) VALUES (1)`);
+} catch (_) { /* déjà présent */ }
+
 console.log(`✅ Base de données initialisée : ${dbPath}`);
