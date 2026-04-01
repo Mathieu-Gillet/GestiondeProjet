@@ -1,6 +1,7 @@
+const bcrypt = require('bcryptjs');
 const { z } = require('zod');
 const { getDb } = require('../db/database');
-const { testLdapConnection } = require('../services/ldapService');
+const { testLdapConnection, searchLdapUsers, mapLdapGroupsToService, getLdapConfig } = require('../services/ldapService');
 
 const ldapConfigSchema = z.object({
   enabled:                 z.boolean(),
@@ -49,7 +50,6 @@ function getConfig(req, res) {
     });
   }
 
-  // Ne pas renvoyer le mot de passe en clair, masquer avec un placeholder
   res.json({
     ...row,
     enabled: row.enabled === 1,
@@ -71,7 +71,6 @@ function saveConfig(req, res) {
   const db = getDb();
   const existing = db.prepare('SELECT bind_password FROM ldap_config WHERE id = 1').get();
 
-  // Conserver l'ancien mot de passe si le client renvoie le placeholder
   const bindPassword = (data.bind_password === '••••••••' || data.bind_password === null)
     ? (existing?.bind_password || null)
     : (data.bind_password || null);
@@ -146,4 +145,103 @@ async function testConfig(req, res) {
   }
 }
 
-module.exports = { getConfig, saveConfig, testConfig };
+// Rechercher des utilisateurs dans l'annuaire LDAP
+async function searchUsers(req, res) {
+  if (!requireLocalAdmin(req, res)) return;
+
+  const cfg = getLdapConfig();
+  if (!cfg) {
+    return res.status(503).json({ error: 'LDAP non configuré ou désactivé. Sauvegardez et activez la configuration LDAP d\'abord.' });
+  }
+
+  const searchTerm = (req.query.q || '').toString().slice(0, 100);
+
+  try {
+    const ldapUsers = await searchLdapUsers(searchTerm, cfg);
+
+    // Enrichir avec le statut local (déjà importé ou non)
+    const db = getDb();
+    const result = ldapUsers.map((u) => {
+      const local = db.prepare('SELECT id, role, service FROM users WHERE ldap_dn = ? OR username = ?')
+        .get(u.dn, u.username);
+      const { service, role } = mapLdapGroupsToService(u.groups);
+      return {
+        ...u,
+        mapped_service: service,
+        mapped_role: role,
+        local_id: local?.id || null,
+        already_imported: !!local,
+      };
+    });
+
+    res.json({ users: result, total: result.length });
+  } catch (err) {
+    console.error('LDAP search error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+// Importer des utilisateurs LDAP sélectionnés dans la base locale
+async function importUsers(req, res) {
+  if (!requireLocalAdmin(req, res)) return;
+
+  const { dns } = req.body; // tableau de DN à importer
+  if (!Array.isArray(dns) || dns.length === 0) {
+    return res.status(400).json({ error: 'Aucun utilisateur sélectionné' });
+  }
+  if (dns.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 utilisateurs par import' });
+  }
+
+  const cfg = getLdapConfig();
+  if (!cfg) {
+    return res.status(503).json({ error: 'LDAP non configuré ou désactivé' });
+  }
+
+  try {
+    // Récupérer tous les utilisateurs de l'annuaire (sans filtre texte) et filtrer côté serveur sur les DN demandés
+    const allUsers = await searchLdapUsers('', cfg);
+    const toImport = allUsers.filter((u) => dns.includes(u.dn));
+
+    const db = getDb();
+    const results = { created: 0, updated: 0, skipped: 0, errors: [] };
+
+    for (const ldapUser of toImport) {
+      try {
+        const { service, role } = mapLdapGroupsToService(ldapUser.groups);
+        const pole = service === 'network' ? 'network' : 'dev';
+
+        const existing = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(ldapUser.dn)
+          || db.prepare('SELECT * FROM users WHERE username = ?').get(ldapUser.username)
+          || (ldapUser.email ? db.prepare('SELECT * FROM users WHERE email = ?').get(ldapUser.email) : null);
+
+        if (existing) {
+          db.prepare('UPDATE users SET service = ?, pole = ?, ldap_dn = ?, email = ? WHERE id = ?')
+            .run(service, pole, ldapUser.dn, ldapUser.email || existing.email, existing.id);
+          results.updated++;
+        } else {
+          const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
+          const safeUsername = ldapUser.username.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50);
+          db.prepare(`
+            INSERT INTO users (username, email, password, role, pole, service, ldap_dn)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(safeUsername, ldapUser.email || `${safeUsername}@ldap`, fakeHash, role, pole, service, ldapUser.dn);
+          results.created++;
+        }
+      } catch (err) {
+        results.errors.push({ dn: ldapUser.dn, error: err.message });
+        results.skipped++;
+      }
+    }
+
+    res.json({
+      message: `Import terminé : ${results.created} créé(s), ${results.updated} mis à jour, ${results.skipped} ignoré(s)`,
+      ...results,
+    });
+  } catch (err) {
+    console.error('LDAP import error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+}
+
+module.exports = { getConfig, saveConfig, testConfig, searchUsers, importUsers };

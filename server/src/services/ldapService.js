@@ -138,4 +138,64 @@ async function testLdapConnection(cfg) {
   }
 }
 
-module.exports = { authenticateWithLdap, mapLdapGroupsToService, testLdapConnection, getLdapConfig };
+// Rechercher des utilisateurs dans l'annuaire LDAP
+async function searchLdapUsers(searchTerm, cfg) {
+  if (!cfg) throw new Error('LDAP non configuré');
+
+  const { Client } = await import('ldapts');
+
+  const tlsOptions = cfg.tls_reject_unauthorized === false || cfg.tls_reject_unauthorized === 0
+    ? { rejectUnauthorized: false }
+    : {};
+
+  const client = new Client({
+    url: cfg.url,
+    tlsOptions,
+    timeout: 10000,
+    connectTimeout: 5000,
+  });
+
+  try {
+    await client.bind(cfg.bind_dn, cfg.bind_password || '');
+
+    const searchBase = cfg.user_search_base || cfg.base_dn;
+
+    // Filtre : objectClass=person pour AD/LDAP, avec recherche optionnelle sur nom/email/login
+    let filter;
+    if (searchTerm && searchTerm.trim()) {
+      const escaped = escapeFilter(searchTerm.trim());
+      filter = `(&(objectClass=person)(|(sAMAccountName=*${escaped}*)(displayName=*${escaped}*)(mail=*${escaped}*)(cn=*${escaped}*)))`;
+    } else {
+      filter = '(objectClass=person)';
+    }
+
+    const { searchEntries } = await client.search(searchBase, {
+      scope: 'sub',
+      filter,
+      attributes: ['dn', 'mail', 'displayName', 'memberOf', 'sAMAccountName', 'cn', 'userAccountControl'],
+      sizeLimit: 200,
+    });
+
+    return searchEntries.map((entry) => {
+      let groups = entry.memberOf || [];
+      if (!Array.isArray(groups)) groups = [groups];
+
+      // Filtrer les comptes désactivés dans AD (bit 2 de userAccountControl)
+      const uac = parseInt(entry.userAccountControl) || 0;
+      const disabled = !!(uac & 2);
+
+      return {
+        dn: entry.dn,
+        username: entry.sAMAccountName || entry.cn || '',
+        email: entry.mail || '',
+        displayName: entry.displayName || entry.cn || entry.sAMAccountName || '',
+        groups,
+        disabled,
+      };
+    }).filter((u) => u.username); // Exclure les entrées sans username
+  } finally {
+    await client.unbind();
+  }
+}
+
+module.exports = { authenticateWithLdap, mapLdapGroupsToService, testLdapConnection, getLdapConfig, searchLdapUsers };
