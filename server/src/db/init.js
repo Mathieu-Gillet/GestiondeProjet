@@ -200,6 +200,7 @@ db.exec(`
     group_tech              TEXT,
     group_achats            TEXT,
     group_admin             TEXT,
+    group_dsi               TEXT,
     updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -216,8 +217,10 @@ try {
     "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
   ).get()?.sql || '';
 
+  // Migration nécessaire si : anciens rôles présents OU 'dsi' absent du schéma
   const needsMigration = schemaSql.includes("'lead'") || schemaSql.includes("'member'")
-    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"));
+    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"))
+    || !schemaSql.includes("'dsi'");
 
   if (needsMigration) {
     db.exec('PRAGMA foreign_keys = OFF');
@@ -228,7 +231,7 @@ try {
         email      TEXT NOT NULL UNIQUE,
         password   TEXT NOT NULL,
         role       TEXT NOT NULL DEFAULT 'membre'
-                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre')),
+                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre', 'dsi')),
         pole       TEXT CHECK(pole IN ('dev', 'network')),
         service    TEXT NOT NULL DEFAULT 'dev',
         ldap_dn    TEXT,
@@ -249,7 +252,7 @@ try {
     db.exec('DROP TABLE users');
     db.exec('ALTER TABLE users_v2 RENAME TO users');
     db.exec('PRAGMA foreign_keys = ON');
-    console.log('✅ Migration des rôles effectuée : lead→directeur, member→membre');
+    console.log('✅ Migration des rôles effectuée : schéma mis à jour (ajout dsi)');
   }
 } catch (err) {
   try { db.exec('PRAGMA foreign_keys = ON'); } catch (_) {}

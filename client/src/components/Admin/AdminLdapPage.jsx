@@ -11,6 +11,7 @@ const GROUP_LABELS = {
   group_tech:    'Groupe Services Techniques',
   group_achats:  'Groupe Achats',
   group_admin:   'Groupe Administrateurs',
+  group_dsi:     'Groupe DSI',
 }
 
 const SERVICE_LABELS = {
@@ -39,6 +40,7 @@ const defaultForm = {
   group_tech: '',
   group_achats: '',
   group_admin: '',
+  group_dsi: '',
 }
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono'
@@ -137,6 +139,7 @@ function ConfigTab() {
           group_tech:              data.group_tech || '',
           group_achats:            data.group_achats || '',
           group_admin:             data.group_admin || '',
+          group_dsi:               data.group_dsi || '',
         })
       })
       .catch((e) => setError(e.response?.data?.error || 'Erreur de chargement'))
@@ -346,6 +349,7 @@ const ROLE_OPTIONS = [
   { value: 'membre',      label: 'Membre' },
   { value: 'responsable', label: 'Responsable' },
   { value: 'directeur',   label: 'Directeur' },
+  { value: 'dsi',         label: 'DSI' },
 ]
 
 const SERVICE_OPTIONS = Object.entries(SERVICE_LABELS)
@@ -870,6 +874,7 @@ function ImportedUsersTab() {
 
 function RoleBadge({ role }) {
   const colors = {
+    dsi:         'bg-cyan-100 text-cyan-700',
     directeur:   'bg-purple-100 text-purple-700',
     responsable: 'bg-amber-100 text-amber-700',
     membre:      'bg-gray-100 text-gray-600',

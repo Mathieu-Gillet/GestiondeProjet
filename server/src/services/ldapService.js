@@ -161,6 +161,7 @@ function mapLdapGroupsToService(groups) {
     if (cfg.group_tech)    groupMap[cfg.group_tech]    = { service: 'services_techniques' };
     if (cfg.group_achats)  groupMap[cfg.group_achats]  = { service: 'achats' };
     if (cfg.group_admin)   groupMap[cfg.group_admin]   = { service: 'dev', role: 'directeur' };
+    if (cfg.group_dsi)     groupMap[cfg.group_dsi]     = { service: 'dev', role: 'dsi' };
   }
 
   let service = 'dev';

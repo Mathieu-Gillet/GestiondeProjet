@@ -36,7 +36,8 @@ export const VALID_SERVICES = Object.keys(SERVICE_CONFIG)
 
 // ── Rôles ──────────────────────────────────────────────────────────────────
 export const ROLE_CONFIG = {
-  admin:       { label: 'Administrateur', color: 'bg-red-100 text-red-700',    description: 'Accès système complet (local uniquement)' },
+  admin:       { label: 'Administrateur', color: 'bg-red-100 text-red-700',      description: 'Accès système complet (local uniquement)' },
+  dsi:         { label: 'DSI',            color: 'bg-cyan-100 text-cyan-700',    description: 'Droits directeur sur les services dev et réseau' },
   directeur:   { label: 'Directeur',      color: 'bg-purple-100 text-purple-700', description: 'Tous les droits sur son service (ou tous les services si DG)' },
   responsable: { label: 'Responsable',    color: 'bg-amber-100 text-amber-700',  description: 'Créer et modifier dans son service, pas de suppression' },
   membre:      { label: 'Membre',         color: 'bg-gray-100 text-gray-600',    description: 'Lecture, commentaires, mise à jour des tâches assignées' },
@@ -49,12 +50,12 @@ export function hasFullAccess(user) {
 
 // Peut créer/modifier des projets et tâches (pas forcément supprimer)
 export function canManage(user) {
-  return ['admin', 'directeur', 'responsable'].includes(user?.role)
+  return ['admin', 'dsi', 'directeur', 'responsable'].includes(user?.role)
 }
 
 // Peut supprimer des projets/tâches
 export function canDelete(user) {
-  return ['admin', 'directeur'].includes(user?.role)
+  return ['admin', 'dsi', 'directeur'].includes(user?.role)
 }
 
 // Libellé du rôle affiché à l'utilisateur

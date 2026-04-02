@@ -29,6 +29,9 @@ function serviceToPole(service) {
   return service === 'network' ? 'network' : 'dev';
 }
 
+// Services couverts par le rôle DSI
+const DSI_SERVICES = ['dev', 'network'];
+
 // Admin système OU Direction Générale → accès complet tous services
 function hasFullAccess(user) {
   return user.role === 'admin' || user.service === 'direction_generale';
@@ -42,12 +45,14 @@ function canSeeAllServices(user) {
 // Peut créer/modifier dans un service donné
 function canManageService(user, service) {
   if (hasFullAccess(user)) return true;
+  if (user.role === 'dsi' && DSI_SERVICES.includes(service)) return true;
   return ['directeur', 'responsable'].includes(user.role) && user.service === service;
 }
 
 // Peut supprimer dans un service donné
 function canDeleteInService(user, service) {
   if (hasFullAccess(user)) return true;
+  if (user.role === 'dsi' && DSI_SERVICES.includes(service)) return true;
   return user.role === 'directeur' && user.service === service;
 }
 
@@ -87,14 +92,23 @@ function list(req, res) {
   let { service, status, priority, search } = req.query;
   const db = getDb();
 
+  let dsiFilter = false;
   if (!canSeeAllServices(req.user)) {
-    service = req.user.service || 'dev';
+    if (req.user.role === 'dsi') {
+      if (service && !DSI_SERVICES.includes(service)) {
+        return res.status(403).json({ error: 'Accès limité aux services dev et réseau' });
+      }
+      if (!service) dsiFilter = true;
+    } else {
+      service = req.user.service || 'dev';
+    }
   }
 
   let query = 'SELECT * FROM projects WHERE 1=1';
   const params = [];
 
-  if (service) { query += ' AND service = ?'; params.push(service); }
+  if (dsiFilter) { query += ` AND service IN ('dev', 'network')`; }
+  else if (service) { query += ' AND service = ?'; params.push(service); }
   if (status) { query += ' AND status = ?'; params.push(status); }
   if (priority) { query += ' AND priority = ?'; params.push(priority); }
   if (search) {
@@ -130,8 +144,14 @@ function getOne(req, res) {
   const project = getProjectWithRelations(db, req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  if (!canSeeAllServices(req.user) && req.user.service && req.user.service !== project.service) {
-    return res.status(403).json({ error: 'Accès refusé' });
+  if (!canSeeAllServices(req.user)) {
+    if (req.user.role === 'dsi') {
+      if (!DSI_SERVICES.includes(project.service)) {
+        return res.status(403).json({ error: 'Accès refusé' });
+      }
+    } else if (req.user.service && req.user.service !== project.service) {
+      return res.status(403).json({ error: 'Accès refusé' });
+    }
   }
 
   res.json(project);

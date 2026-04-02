@@ -97,8 +97,12 @@ try {
 try {
   db.exec(`ALTER TABLE ldap_config ADD COLUMN use_starttls INTEGER NOT NULL DEFAULT 0`);
 } catch (_) { /* colonne déjà présente */ }
+// Ajout de group_dsi sur une table ldap_config déjà existante
+try {
+  db.exec(`ALTER TABLE ldap_config ADD COLUMN group_dsi TEXT`);
+} catch (_) { /* colonne déjà présente */ }
 
-// ── Migration des rôles : lead → directeur, member → membre ──────────────────
+// ── Migration des rôles : lead → directeur, member → membre, + ajout dsi ─────
 // SQLite ne permettant pas de modifier une contrainte CHECK, on recrée la table.
 // On vérifie le schéma réel plutôt que les données (sinon les bases vides sont ratées).
 try {
@@ -106,10 +110,10 @@ try {
     "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
   ).get()?.sql || '';
 
-  // Migration nécessaire si le schéma contient encore les anciens rôles
-  // OU s'il ne contient pas encore les nouveaux
+  // Migration nécessaire si : anciens rôles présents OU 'dsi' absent du schéma
   const needsMigration = schemaSql.includes("'lead'") || schemaSql.includes("'member'")
-    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"));
+    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"))
+    || !schemaSql.includes("'dsi'");
 
   if (needsMigration) {
     db.exec('PRAGMA foreign_keys = OFF');
@@ -120,7 +124,7 @@ try {
         email      TEXT NOT NULL UNIQUE,
         password   TEXT NOT NULL,
         role       TEXT NOT NULL DEFAULT 'membre'
-                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre')),
+                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre', 'dsi')),
         pole       TEXT CHECK(pole IN ('dev', 'network')),
         service    TEXT NOT NULL DEFAULT 'dev',
         ldap_dn    TEXT,
@@ -141,7 +145,7 @@ try {
     db.exec('DROP TABLE users');
     db.exec('ALTER TABLE users_v2 RENAME TO users');
     db.exec('PRAGMA foreign_keys = ON');
-    console.log('✅ Migration des rôles : lead→directeur, member→membre');
+    console.log('✅ Migration des rôles : schéma mis à jour (ajout dsi)');
   } else {
     console.log('ℹ️  Migration des rôles déjà appliquée.');
   }

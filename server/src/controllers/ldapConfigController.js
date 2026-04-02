@@ -20,6 +20,7 @@ const ldapConfigSchema = z.object({
   group_tech:              z.string().max(500).optional().nullable(),
   group_achats:            z.string().max(500).optional().nullable(),
   group_admin:             z.string().max(500).optional().nullable(),
+  group_dsi:               z.string().max(500).optional().nullable(),
 });
 
 // Vérifier que l'utilisateur est un admin local (pas LDAP)
@@ -47,7 +48,7 @@ function getConfig(req, res) {
       user_search_base: '', user_search_filter: '(sAMAccountName={{username}})',
       tls_reject_unauthorized: true,
       group_dev: '', group_network: '', group_rh: '',
-      group_dg: '', group_tech: '', group_achats: '', group_admin: '',
+      group_dg: '', group_tech: '', group_achats: '', group_admin: '', group_dsi: '',
     });
   }
 
@@ -95,6 +96,7 @@ function saveConfig(req, res) {
       group_tech              = ?,
       group_achats            = ?,
       group_admin             = ?,
+      group_dsi               = ?,
       updated_at              = CURRENT_TIMESTAMP
     WHERE id = 1
   `).run(
@@ -114,6 +116,7 @@ function saveConfig(req, res) {
     data.group_tech || null,
     data.group_achats || null,
     data.group_admin || null,
+    data.group_dsi || null,
   );
 
   res.json({ message: 'Configuration LDAP sauvegardée' });

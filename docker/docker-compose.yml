@@ -53,6 +53,7 @@ services:
       LDAP_GROUP_TECH: ${LDAP_GROUP_TECH:-}
       LDAP_GROUP_ACHATS: ${LDAP_GROUP_ACHATS:-}
       LDAP_GROUP_ADMIN: ${LDAP_GROUP_ADMIN:-}
+      LDAP_GROUP_DSI: ${LDAP_GROUP_DSI:-}
 
     healthcheck:
       # Vérifie que le serveur répond (401 est attendu sans token)

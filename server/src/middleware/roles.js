@@ -1,5 +1,6 @@
 // Rôles disponibles :
 //  admin       — administrateur système local (tous droits, tous services)
+//  dsi         — DSI (droits directeur sur dev ET réseau uniquement)
 //  directeur   — directeur de service (tous droits sur son service, y compris suppression)
 //  responsable — responsable de service (créer/modifier sur son service, pas de suppression)
 //  membre      — membre (lecture, commentaires, mise à jour de ses tâches assignées)
@@ -23,6 +24,12 @@ function requireServiceAccess(getService) {
       return res.status(401).json({ error: 'Non authentifié' });
     }
     if (req.user.role === 'admin') return next();
+
+    if (req.user.role === 'dsi') {
+      const service = typeof getService === 'function' ? getService(req) : getService;
+      if (!service || ['dev', 'network'].includes(service)) return next();
+      return res.status(403).json({ error: 'Accès limité aux services dev et réseau' });
+    }
 
     if (req.user.role === 'directeur' || req.user.role === 'responsable') {
       const service = typeof getService === 'function' ? getService(req) : getService;

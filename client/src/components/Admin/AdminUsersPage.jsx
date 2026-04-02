@@ -144,6 +144,7 @@ function UserForm({ user, onSave, onClose }) {
                 <option value="membre">Membre</option>
                 <option value="responsable">Responsable</option>
                 <option value="directeur">Directeur</option>
+                <option value="dsi">DSI</option>
                 <option value="admin">Administrateur</option>
               </select>
             </div>
@@ -165,6 +166,11 @@ function UserForm({ user, onSave, onClose }) {
             </div>
           </div>
 
+          {form.role === 'dsi' && (
+            <p className="text-xs text-cyan-700 bg-cyan-50 px-3 py-2 rounded-lg">
+              DSI — droits directeur (créer, modifier, supprimer) sur les services Développement et Réseau.
+            </p>
+          )}
           {form.role === 'admin' && (
             <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
               Les comptes Administrateur ont accès à tout le système (réservé au compte local).
