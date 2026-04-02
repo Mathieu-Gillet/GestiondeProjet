@@ -4,6 +4,32 @@ const { getDb } = require('../db/database');
 // Traduit les erreurs réseau bas niveau en messages compréhensibles
 function translateLdapError(err) {
   const msg = err.message || '';
+
+  // Codes d'erreur Active Directory (champ "data XXXX" dans le message)
+  const adCodeMatch = msg.match(/data\s+([0-9a-fA-F]+)/i);
+  if (adCodeMatch) {
+    const code = adCodeMatch[1].toLowerCase();
+    const adCodes = {
+      '52e': 'Mot de passe incorrect.',
+      '525': 'Utilisateur introuvable dans l\'annuaire Active Directory.',
+      '530': 'Connexion non autorisée à cette heure (restriction horaire AD).',
+      '531': 'Connexion non autorisée depuis ce poste (restriction AD).',
+      '532': 'Mot de passe expiré — l\'utilisateur doit le changer.',
+      '533': 'Compte désactivé dans Active Directory.',
+      '701': 'Compte expiré dans Active Directory.',
+      '773': 'L\'utilisateur doit changer son mot de passe (première connexion).',
+      '775': 'Compte verrouillé (trop de tentatives incorrectes).',
+    };
+    if (adCodes[code]) {
+      return new Error(adCodes[code]);
+    }
+  }
+
+  // Erreur générique InvalidCredentials LDAP (code 49)
+  if (msg.includes('InvalidCredentials') || msg.includes('error 49') || msg.includes('Code: 0x31')) {
+    return new Error('Identifiants invalides (code LDAP 49).');
+  }
+
   if (msg.includes('ECONNRESET')) {
     return new Error(
       'Connexion réinitialisée par le serveur AD (ECONNRESET). ' +
@@ -31,9 +57,6 @@ function translateLdapError(err) {
       'Erreur de certificat TLS. Si vous utilisez un certificat auto-signé, ' +
       'décochez "Vérifier le certificat TLS" dans la configuration.'
     );
-  }
-  if (msg.includes('InvalidCredentials') || msg.includes('49 ')) {
-    return new Error('Identifiants du compte de service incorrects (code LDAP 49).');
   }
   return err;
 }
@@ -108,7 +131,7 @@ async function authenticateWithLdap(username, password) {
     const userDn = userEntry.dn;
 
     // 3. Bind avec les credentials de l'utilisateur (vérification du mot de passe)
-    await client.bind(userDn, password);
+    await client.bind(userDn, password).catch((e) => { throw translateLdapError(e); });
 
     // 4. Normaliser le champ memberOf en tableau
     let groups = userEntry.memberOf || [];
