@@ -509,26 +509,42 @@ function ImportTab() {
       {importResult && (
         <div className={`rounded-xl px-5 py-4 text-sm border ${
           importResult.type === 'success'
-            ? 'bg-green-50 border-green-200 text-green-800'
+            ? (importResult.skipped > 0 ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-green-50 border-green-200 text-green-800')
             : 'bg-red-50 border-red-200 text-red-700'
         }`}>
           <p className="font-medium">{importResult.message}</p>
           {importResult.type === 'success' && (
-            <div className="flex gap-4 mt-2 text-xs">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-                {importResult.created} créé(s)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
-                {importResult.updated} mis à jour
-              </span>
+            <div className="flex gap-4 mt-2 text-xs flex-wrap">
+              {importResult.created > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                  {importResult.created} créé(s)
+                </span>
+              )}
+              {importResult.updated > 0 && (
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
+                  {importResult.updated} mis à jour
+                </span>
+              )}
               {importResult.skipped > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />
+                  <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
                   {importResult.skipped} ignoré(s)
                 </span>
               )}
+            </div>
+          )}
+          {/* Détail des erreurs d'import */}
+          {importResult.errors?.length > 0 && (
+            <div className="mt-3 space-y-1">
+              <p className="text-xs font-semibold opacity-80">Détail des erreurs :</p>
+              {importResult.errors.map((e, i) => (
+                <div key={i} className="text-xs font-mono bg-black/5 rounded px-2 py-1">
+                  <span className="opacity-60 truncate">{e.dn?.split(',')[0]} </span>
+                  <span className="font-medium">→ {e.error}</span>
+                </div>
+              ))}
             </div>
           )}
         </div>

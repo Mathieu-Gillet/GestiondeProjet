@@ -212,40 +212,53 @@ async function importUsers(req, res) {
 
   for (const item of usersToImport) {
     if (!item.dn || typeof item.dn !== 'string') {
-      results.errors.push({ dn: item.dn, error: 'DN invalide' });
+      results.errors.push({ dn: String(item.dn), error: 'DN invalide' });
       results.skipped++;
       continue;
     }
 
     try {
-      // Utiliser les données fournies par le client (déjà récupérées depuis l'annuaire)
       const service  = (item.service  && VALID_SERVICES.includes(item.service))  ? item.service  : 'dev';
       const role     = (item.role     && VALID_ROLES.includes(item.role))         ? item.role     : 'membre';
       const pole     = service === 'network' ? 'network' : 'dev';
-      const username = item.username ? String(item.username).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50) : null;
-      const email    = item.email    ? String(item.email).slice(0, 254)    : null;
+      const rawUsername = item.username ? String(item.username).replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) : null;
+      const email       = item.email   ? String(item.email).slice(0, 254) : null;
 
-      if (!username) {
-        results.errors.push({ dn: item.dn, error: 'Nom d\'utilisateur manquant' });
+      if (!rawUsername) {
+        results.errors.push({ dn: item.dn, error: 'Nom d\'utilisateur manquant dans les données envoyées' });
         results.skipped++;
         continue;
       }
 
+      // Recherche d'un compte existant : priorité DN > username > email
       const existing = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(item.dn)
-        || db.prepare('SELECT * FROM users WHERE username = ?').get(username)
+        || db.prepare('SELECT * FROM users WHERE username = ?').get(rawUsername)
         || (email ? db.prepare('SELECT * FROM users WHERE email = ?').get(email) : null);
 
       if (existing) {
-        db.prepare('UPDATE users SET username = ?, service = ?, pole = ?, role = ?, ldap_dn = ?, email = ? WHERE id = ?')
-          .run(username, service, pole, role, item.dn, email || existing.email, existing.id);
+        // Mise à jour : on ne change PAS le username pour éviter les conflits UNIQUE
+        db.prepare('UPDATE users SET service = ?, pole = ?, role = ?, ldap_dn = ?, email = ? WHERE id = ?')
+          .run(service, pole, role, item.dn, email || existing.email, existing.id);
         results.updated++;
       } else {
+        // Création : résoudre les conflits de username en ajoutant un suffixe si besoin
+        let username = rawUsername;
+        let suffix = 1;
+        while (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
+          username = `${rawUsername}_${suffix++}`;
+        }
+
+        // Email fallback unique basé sur le DN hashé pour éviter les collisions
+        const fallbackEmail = email || `${username}@ldap.local`;
+        const finalEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(fallbackEmail)
+          ? `${username}_${Date.now()}@ldap.local`
+          : fallbackEmail;
+
         const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
-        const safeEmail = email || `${username}@ldap.local`;
         db.prepare(`
           INSERT INTO users (username, email, password, role, pole, service, ldap_dn)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(username, safeEmail, fakeHash, role, pole, service, item.dn);
+        `).run(username, finalEmail, fakeHash, role, pole, service, item.dn);
         results.created++;
       }
     } catch (err) {
