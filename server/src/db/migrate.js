@@ -100,12 +100,18 @@ try {
 
 // ── Migration des rôles : lead → directeur, member → membre ──────────────────
 // SQLite ne permettant pas de modifier une contrainte CHECK, on recrée la table.
+// On vérifie le schéma réel plutôt que les données (sinon les bases vides sont ratées).
 try {
-  const oldRoleCount = db.prepare(
-    "SELECT COUNT(*) as n FROM users WHERE role IN ('lead', 'member')"
-  ).get();
+  const schemaSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).get()?.sql || '';
 
-  if (oldRoleCount.n > 0) {
+  // Migration nécessaire si le schéma contient encore les anciens rôles
+  // OU s'il ne contient pas encore les nouveaux
+  const needsMigration = schemaSql.includes("'lead'") || schemaSql.includes("'member'")
+    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"));
+
+  if (needsMigration) {
     db.exec('PRAGMA foreign_keys = OFF');
     db.exec(`
       CREATE TABLE IF NOT EXISTS users_v2 (

@@ -210,13 +210,16 @@ try {
 
 // ── Migration des rôles : lead → directeur, member → membre ──────────────────
 // SQLite ne permet pas de modifier une contrainte CHECK en place.
-// On recrée la table users avec la nouvelle contrainte via renommage.
+// On vérifie le schéma réel pour ne pas rater les bases vides ou récentes.
 try {
-  const oldRoleCount = db.prepare(
-    "SELECT COUNT(*) as n FROM users WHERE role IN ('lead', 'member')"
-  ).get();
+  const schemaSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+  ).get()?.sql || '';
 
-  if (oldRoleCount.n > 0) {
+  const needsMigration = schemaSql.includes("'lead'") || schemaSql.includes("'member'")
+    || (!schemaSql.includes("'directeur'") && !schemaSql.includes("'membre'"));
+
+  if (needsMigration) {
     db.exec('PRAGMA foreign_keys = OFF');
     db.exec(`
       CREATE TABLE IF NOT EXISTS users_v2 (
@@ -252,8 +255,5 @@ try {
   try { db.exec('PRAGMA foreign_keys = ON'); } catch (_) {}
   console.error('⚠️  Migration des rôles :', err.message);
 }
-
-// Assurer la contrainte CHECK sur la table existante si déjà à jour
-// (aucune action requise — la table a déjà la bonne contrainte ou vient d'être migrée)
 
 console.log(`✅ Base de données initialisée : ${dbPath}`);
