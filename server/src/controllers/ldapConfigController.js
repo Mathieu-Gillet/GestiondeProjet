@@ -185,13 +185,22 @@ async function searchUsers(req, res) {
 async function importUsers(req, res) {
   if (!requireLocalAdmin(req, res)) return;
 
-  const { dns } = req.body; // tableau de DN à importer
-  if (!Array.isArray(dns) || dns.length === 0) {
+  // Accepte { users: [{dn, service, role}] } ou le format legacy { dns: [...] }
+  let usersToImport = [];
+  if (Array.isArray(req.body.users) && req.body.users.length > 0) {
+    usersToImport = req.body.users;
+  } else if (Array.isArray(req.body.dns) && req.body.dns.length > 0) {
+    usersToImport = req.body.dns.map((dn) => ({ dn }));
+  } else {
     return res.status(400).json({ error: 'Aucun utilisateur sélectionné' });
   }
-  if (dns.length > 100) {
+
+  if (usersToImport.length > 100) {
     return res.status(400).json({ error: 'Maximum 100 utilisateurs par import' });
   }
+
+  const VALID_SERVICES = ['dev', 'network', 'rh', 'direction_generale', 'services_techniques', 'achats'];
+  const VALID_ROLES    = ['directeur', 'responsable', 'membre'];
 
   const cfg = getLdapConfig();
   if (!cfg) {
@@ -199,25 +208,36 @@ async function importUsers(req, res) {
   }
 
   try {
-    // Récupérer tous les utilisateurs de l'annuaire (sans filtre texte) et filtrer côté serveur sur les DN demandés
+    const dns = usersToImport.map((u) => u.dn);
+    // Récupérer les données LDAP pour les DN demandés
     const allUsers = await searchLdapUsers('', cfg);
-    const toImport = allUsers.filter((u) => dns.includes(u.dn));
+    const ldapByDn = Object.fromEntries(allUsers.map((u) => [u.dn, u]));
 
     const db = getDb();
     const results = { created: 0, updated: 0, skipped: 0, errors: [] };
 
-    for (const ldapUser of toImport) {
+    for (const item of usersToImport) {
+      const ldapUser = ldapByDn[item.dn];
+      if (!ldapUser) {
+        results.errors.push({ dn: item.dn, error: 'Utilisateur introuvable dans l\'annuaire' });
+        results.skipped++;
+        continue;
+      }
+
       try {
-        const { service, role } = mapLdapGroupsToService(ldapUser.groups);
-        const pole = service === 'network' ? 'network' : 'dev';
+        // Utiliser le service/rôle fourni par le client si valide, sinon recalculer depuis les groupes AD
+        const groupMapped = mapLdapGroupsToService(ldapUser.groups);
+        const service = (item.service && VALID_SERVICES.includes(item.service)) ? item.service : groupMapped.service;
+        const role    = (item.role    && VALID_ROLES.includes(item.role))       ? item.role    : groupMapped.role;
+        const pole    = service === 'network' ? 'network' : 'dev';
 
         const existing = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(ldapUser.dn)
           || db.prepare('SELECT * FROM users WHERE username = ?').get(ldapUser.username)
           || (ldapUser.email ? db.prepare('SELECT * FROM users WHERE email = ?').get(ldapUser.email) : null);
 
         if (existing) {
-          db.prepare('UPDATE users SET service = ?, pole = ?, ldap_dn = ?, email = ? WHERE id = ?')
-            .run(service, pole, ldapUser.dn, ldapUser.email || existing.email, existing.id);
+          db.prepare('UPDATE users SET service = ?, pole = ?, role = ?, ldap_dn = ?, email = ? WHERE id = ?')
+            .run(service, pole, role, ldapUser.dn, ldapUser.email || existing.email, existing.id);
           results.updated++;
         } else {
           const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);

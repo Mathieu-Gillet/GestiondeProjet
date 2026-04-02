@@ -327,17 +327,44 @@ function ConfigTab() {
   )
 }
 
+const ROLE_OPTIONS = [
+  { value: 'membre',      label: 'Membre' },
+  { value: 'responsable', label: 'Responsable' },
+  { value: 'directeur',   label: 'Directeur' },
+]
+
+const SERVICE_OPTIONS = Object.entries(SERVICE_LABELS)
+
 /* ─────────────────────────── Onglet Import ─────────────────────────── */
 
 function ImportTab() {
-  const [search, setSearch] = useState('')
-  const [users, setUsers] = useState([])
-  const [searched, setSearched] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [selected, setSelected] = useState(new Set())
+  const [search, setSearch]           = useState('')
+  const [serviceFilter, setServiceFilter] = useState('')
+  const [users, setUsers]             = useState([])
+  // overrides: { [dn]: { service, role } } — surcharges manuelles par utilisateur
+  const [overrides, setOverrides]     = useState({})
+  const [searched, setSearched]       = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [importing, setImporting]     = useState(false)
+  const [selected, setSelected]       = useState(new Set())
   const [importResult, setImportResult] = useState(null)
-  const [error, setError] = useState(null)
+  const [error, setError]             = useState(null)
+
+  // Utilisateurs filtrés par service (si filtre actif)
+  const displayed = serviceFilter
+    ? users.filter((u) => effectiveService(u, overrides) === serviceFilter)
+    : users
+
+  function effectiveService(u, ovr) {
+    return ovr[u.dn]?.service ?? u.mapped_service
+  }
+  function effectiveRole(u, ovr) {
+    return ovr[u.dn]?.role ?? u.mapped_role
+  }
+
+  function setOverride(dn, field, value) {
+    setOverrides((prev) => ({ ...prev, [dn]: { ...(prev[dn] || {}), [field]: value } }))
+  }
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -345,6 +372,7 @@ function ImportTab() {
     setError(null)
     setImportResult(null)
     setSelected(new Set())
+    setOverrides({})
     try {
       const r = await api.get('/admin/ldap/users', { params: { q: search } })
       setUsers(r.data.users || [])
@@ -366,11 +394,12 @@ function ImportTab() {
   }
 
   function toggleAll() {
-    const selectable = users.filter((u) => !u.disabled).map((u) => u.dn)
-    if (selected.size === selectable.length) {
-      setSelected(new Set())
+    const selectable = displayed.filter((u) => !u.disabled).map((u) => u.dn)
+    const allSel = selectable.every((dn) => selected.has(dn))
+    if (allSel) {
+      setSelected((prev) => { const next = new Set(prev); selectable.forEach((dn) => next.delete(dn)); return next })
     } else {
-      setSelected(new Set(selectable))
+      setSelected((prev) => { const next = new Set(prev); selectable.forEach((dn) => next.add(dn)); return next })
     }
   }
 
@@ -379,12 +408,22 @@ function ImportTab() {
     setImporting(true)
     setImportResult(null)
     try {
-      const r = await api.post('/admin/ldap/import', { dns: Array.from(selected) })
+      // Envoyer service et rôle effectifs (avec surcharges) pour chaque utilisateur sélectionné
+      const usersPayload = Array.from(selected).map((dn) => {
+        const u = users.find((u) => u.dn === dn)
+        return {
+          dn,
+          service: effectiveService(u, overrides),
+          role:    effectiveRole(u, overrides),
+        }
+      })
+      const r = await api.post('/admin/ldap/import', { users: usersPayload })
       setImportResult({ type: 'success', ...r.data })
       // Rafraîchir le statut des utilisateurs
       const refreshed = await api.get('/admin/ldap/users', { params: { q: search } })
       setUsers(refreshed.data.users || [])
       setSelected(new Set())
+      setOverrides({})
     } catch (e) {
       setImportResult({ type: 'error', message: e.response?.data?.error || 'Erreur lors de l\'import' })
     } finally {
@@ -392,9 +431,16 @@ function ImportTab() {
     }
   }
 
-  const selectable = users.filter((u) => !u.disabled)
-  const allSelected = selectable.length > 0 && selected.size === selectable.length
-  const someSelected = selected.size > 0 && !allSelected
+  const selectableDisplayed = displayed.filter((u) => !u.disabled)
+  const allDisplayedSelected = selectableDisplayed.length > 0 && selectableDisplayed.every((u) => selected.has(u.dn))
+  const someDisplayedSelected = selectableDisplayed.some((u) => selected.has(u.dn)) && !allDisplayedSelected
+
+  // Compter les services distincts dans les résultats pour afficher le filtre
+  const servicesCounts = users.reduce((acc, u) => {
+    const s = effectiveService(u, overrides)
+    acc[s] = (acc[s] || 0) + 1
+    return acc
+  }, {})
 
   return (
     <div className="space-y-5">
@@ -473,23 +519,38 @@ function ImportTab() {
       {searched && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
           {/* Barre d'actions */}
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => { if (el) el.indeterminate = someSelected }}
+                  checked={allDisplayedSelected}
+                  ref={(el) => { if (el) el.indeterminate = someDisplayedSelected }}
                   onChange={toggleAll}
                   className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <span>
                   {selected.size > 0
                     ? `${selected.size} sélectionné(s)`
-                    : `${users.length} utilisateur(s) trouvé(s)`}
+                    : `${displayed.length} / ${users.length} utilisateur(s)`}
                 </span>
               </label>
+
+              {/* Filtre par service */}
+              {users.length > 0 && Object.keys(servicesCounts).length > 1 && (
+                <select
+                  value={serviceFilter}
+                  onChange={(e) => { setServiceFilter(e.target.value); setSelected(new Set()) }}
+                  className="text-xs border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700"
+                >
+                  <option value="">Tous les services ({users.length})</option>
+                  {Object.entries(servicesCounts).map(([s, n]) => (
+                    <option key={s} value={s}>{SERVICE_LABELS[s] || s} ({n})</option>
+                  ))}
+                </select>
+              )}
             </div>
+
             <button
               type="button"
               onClick={handleImport}
@@ -510,7 +571,7 @@ function ImportTab() {
             </button>
           </div>
 
-          {users.length === 0 ? (
+          {displayed.length === 0 ? (
             <div className="py-12 text-center text-gray-400 text-sm">
               Aucun utilisateur trouvé pour cette recherche.
             </div>
@@ -524,61 +585,104 @@ function ImportTab() {
                     <th className="px-4 py-3 text-left">Nom complet</th>
                     <th className="px-4 py-3 text-left">Email</th>
                     <th className="px-4 py-3 text-left">Service</th>
+                    <th className="px-4 py-3 text-left">Rôle</th>
                     <th className="px-4 py-3 text-left">Statut</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {users.map((u) => (
-                    <tr
-                      key={u.dn}
-                      className={`transition-colors ${
-                        u.disabled ? 'opacity-40' : 'hover:bg-gray-50 cursor-pointer'
-                      } ${selected.has(u.dn) ? 'bg-indigo-50' : ''}`}
-                      onClick={() => !u.disabled && toggleSelect(u.dn)}
-                    >
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(u.dn)}
-                          disabled={u.disabled}
-                          onChange={() => toggleSelect(u.dn)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700">{u.username}</td>
-                      <td className="px-4 py-3 text-gray-900">{u.displayName || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{u.email || '—'}</td>
-                      <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                          {SERVICE_LABELS[u.mapped_service] || u.mapped_service}
-                        </span>
-                        {u.mapped_role === 'admin' && (
-                          <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
-                            admin
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {u.disabled ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-gray-400">
-                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
-                            Désactivé
-                          </span>
-                        ) : u.already_imported ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-blue-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
-                            Déjà importé
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-green-600">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-                            Nouveau
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {displayed.map((u) => {
+                    const svc  = effectiveService(u, overrides)
+                    const role = effectiveRole(u, overrides)
+                    const isOverridden = overrides[u.dn]?.service || overrides[u.dn]?.role
+                    return (
+                      <tr
+                        key={u.dn}
+                        className={`transition-colors ${
+                          u.disabled ? 'opacity-40' : selected.has(u.dn) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(u.dn)}
+                            disabled={u.disabled}
+                            onChange={() => toggleSelect(u.dn)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          />
+                        </td>
+                        <td
+                          className="px-4 py-2.5 font-mono text-xs text-gray-700 cursor-pointer"
+                          onClick={() => !u.disabled && toggleSelect(u.dn)}
+                        >{u.username}</td>
+                        <td
+                          className="px-4 py-2.5 text-gray-900 cursor-pointer"
+                          onClick={() => !u.disabled && toggleSelect(u.dn)}
+                        >{u.displayName || '—'}</td>
+                        <td
+                          className="px-4 py-2.5 text-gray-500 text-xs cursor-pointer"
+                          onClick={() => !u.disabled && toggleSelect(u.dn)}
+                        >{u.email || '—'}</td>
+
+                        {/* Service — sélectable */}
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={svc}
+                            disabled={u.disabled}
+                            onChange={(e) => setOverride(u.dn, 'service', e.target.value)}
+                            className={`text-xs border rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                              isOverridden && overrides[u.dn]?.service
+                                ? 'border-amber-400 bg-amber-50 text-amber-800'
+                                : 'border-gray-200 bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            {SERVICE_OPTIONS.map(([v, l]) => (
+                              <option key={v} value={v}>{l}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Rôle — sélectable */}
+                        <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={role}
+                            disabled={u.disabled}
+                            onChange={(e) => setOverride(u.dn, 'role', e.target.value)}
+                            className={`text-xs border rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                              isOverridden && overrides[u.dn]?.role
+                                ? 'border-amber-400 bg-amber-50 text-amber-800'
+                                : 'border-gray-200 bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            {ROLE_OPTIONS.map((r) => (
+                              <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td
+                          className="px-4 py-2.5 cursor-pointer"
+                          onClick={() => !u.disabled && toggleSelect(u.dn)}
+                        >
+                          {u.disabled ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />
+                              Désactivé
+                            </span>
+                          ) : u.already_imported ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 inline-block" />
+                              Déjà importé
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                              Nouveau
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
