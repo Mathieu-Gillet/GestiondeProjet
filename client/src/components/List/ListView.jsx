@@ -3,7 +3,7 @@ import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
 import ProjectModal from '../Project/ProjectModal'
 import ProjectForm from '../Project/ProjectForm'
-import { PRIORITY_CONFIG, POLE_CONFIG, STATUS_CONFIG, formatDate, isOverdue } from '../../utils/format'
+import { PRIORITY_CONFIG, POLE_CONFIG, STATUS_CONFIG, formatDate, isOverdue, canManage } from '../../utils/format'
 
 const STATUS_INDICATOR = {
   backlog:     'bg-gray-300',
@@ -95,7 +95,7 @@ function ListSection({ status, projects, onRowClick, onAddClick }) {
   const [collapsed, setCollapsed] = useState(false)
   const config = STATUS_CONFIG[status]
   const user = useAuthStore((s) => s.user)
-  const canCreate = user?.role === 'admin' || user?.role === 'lead'
+  const canCreate = canManage(user)
 
   return (
     <div>

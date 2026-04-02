@@ -3,7 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const ctrl = require('../controllers/exportController');
 
-// Export Excel — admin et leads uniquement
-router.get('/projects', authenticate, requireRole('admin', 'lead'), ctrl.exportProjects);
+// Export Excel — admin, directeur et responsable
+router.get('/projects', authenticate, requireRole('admin', 'directeur', 'responsable'), ctrl.exportProjects);
 
 module.exports = router;

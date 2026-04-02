@@ -10,7 +10,7 @@ import useProjectStore from '../../store/projectStore'
 import api from '../../services/api'
 import { taskService } from '../../services/taskService'
 import { dateRequestService } from '../../services/dateRequestService'
-import { formatDate, isOverdue, SERVICE_CONFIG, STATUS_CONFIG, PRIORITY_CONFIG, formatDuration } from '../../utils/format'
+import { formatDate, isOverdue, SERVICE_CONFIG, STATUS_CONFIG, PRIORITY_CONFIG, formatDuration, canManage, roleLabel } from '../../utils/format'
 import ProjectModal from '../Project/ProjectModal'
 
 const TASK_STATUS_CFG = {
@@ -960,7 +960,7 @@ export default function MonEspacePage() {
   const [pendingValidationCount, setPendingValidationCount] = useState(0)
   const [submitSuccess, setSubmitSuccess] = useState('')
 
-  const isLead = user?.role === 'lead' || user?.role === 'admin'
+  const isLead = canManage(user)
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -1069,7 +1069,7 @@ export default function MonEspacePage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{user?.username}</h1>
             <p className="text-base text-gray-500 capitalize">
-              {user?.role === 'admin' ? 'Administrateur' : user?.role === 'lead' ? 'Responsable' : 'Membre'}
+              {roleLabel(user)}
               {user?.service && SERVICE_CONFIG[user.service] ? ` · ${SERVICE_CONFIG[user.service].icon} ${SERVICE_CONFIG[user.service].label}` : ''}
             </p>
           </div>

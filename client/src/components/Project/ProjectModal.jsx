@@ -5,7 +5,7 @@ import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
 import ProjectForm from './ProjectForm'
 import ConfirmModal from '../ConfirmModal'
-import { PRIORITY_CONFIG, POLE_CONFIG, SERVICE_CONFIG, STATUS_CONFIG, formatDate, isOverdue, formatDuration } from '../../utils/format'
+import { PRIORITY_CONFIG, POLE_CONFIG, SERVICE_CONFIG, STATUS_CONFIG, formatDate, isOverdue, formatDuration, canManage, canDelete } from '../../utils/format'
 import { format, parseISO, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
@@ -33,9 +33,11 @@ export default function ProjectModal({ projectId, onClose }) {
   const user = useAuthStore((s) => s.user)
 
   const isArchived = project?.status === 'done'
-  const canEdit = user?.role === 'admin'
+  const isDG = user?.service === 'direction_generale'
+  const canEdit = user?.role === 'admin' || isDG
     ? true
-    : !isArchived && user?.role === 'lead' && user?.pole === project?.pole
+    : !isArchived && canManage(user) && (isDG || user?.service === project?.service)
+  const canDeleteProject = canDelete(user) && (user?.role === 'admin' || isDG || user?.service === project?.service)
 
   async function load() {
     setLoading(true)
@@ -278,20 +280,20 @@ export default function ProjectModal({ projectId, onClose }) {
                 <span className="text-xs px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg">Lecture seule</span>
               )}
               {canEdit && (
-                <>
-                  <button
-                    onClick={() => setShowEdit(true)}
-                    className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
-                  >
-                    Modifier
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="text-xs px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 text-red-600"
-                  >
-                    Supprimer
-                  </button>
-                </>
+                <button
+                  onClick={() => setShowEdit(true)}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
+                >
+                  Modifier
+                </button>
+              )}
+              {canDeleteProject && (
+                <button
+                  onClick={handleDelete}
+                  className="text-xs px-3 py-1.5 border border-red-200 rounded-lg hover:bg-red-50 text-red-600"
+                >
+                  Supprimer
+                </button>
               )}
               <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 ml-1">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -767,24 +769,24 @@ export default function ProjectModal({ projectId, onClose }) {
                             </span>
 
                             {canEdit && (
-                              <>
-                                <button
-                                  onClick={() => handleStartEditTask(task)}
-                                  className="text-gray-300 hover:text-indigo-500 flex-shrink-0"
-                                  title="Modifier la tâche"
-                                >
-                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                      d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
-                                    />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteTask(task.id)}
-                                  className="text-gray-300 hover:text-red-400 flex-shrink-0 text-base leading-none"
-                                  title="Supprimer la tâche"
-                                >✕</button>
-                              </>
+                              <button
+                                onClick={() => handleStartEditTask(task)}
+                                className="text-gray-300 hover:text-indigo-500 flex-shrink-0"
+                                title="Modifier la tâche"
+                              >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                    d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"
+                                  />
+                                </svg>
+                              </button>
+                            )}
+                            {canDeleteProject && (
+                              <button
+                                onClick={() => handleDeleteTask(task.id)}
+                                className="text-gray-300 hover:text-red-400 flex-shrink-0 text-base leading-none"
+                                title="Supprimer la tâche"
+                              >✕</button>
                             )}
                           </div>
 

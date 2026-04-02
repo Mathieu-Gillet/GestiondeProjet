@@ -2,19 +2,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { userService } from '../../services/userService'
 import useAuthStore from '../../store/authStore'
-import { SERVICE_CONFIG, VALID_SERVICES } from '../../utils/format'
-
-const ROLE_CONFIG = {
-  admin:  { label: 'Admin',       color: 'bg-red-100 text-red-700' },
-  lead:   { label: 'Responsable', color: 'bg-amber-100 text-amber-700' },
-  member: { label: 'Membre',      color: 'bg-gray-100 text-gray-600' },
-}
+import { SERVICE_CONFIG, VALID_SERVICES, ROLE_CONFIG } from '../../utils/format'
 
 const EMPTY_FORM = {
   username: '',
   email: '',
   password: '',
-  role: 'member',
+  role: 'membre',
   service: 'dev',
   pole: 'dev',
 }
@@ -147,9 +141,10 @@ function UserForm({ user, onSave, onClose }) {
                 onChange={(e) => setField('role', e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="member">Membre</option>
-                <option value="lead">Responsable</option>
-                <option value="admin">Admin</option>
+                <option value="membre">Membre</option>
+                <option value="responsable">Responsable</option>
+                <option value="directeur">Directeur</option>
+                <option value="admin">Administrateur</option>
               </select>
             </div>
             <div>
@@ -159,6 +154,7 @@ function UserForm({ user, onSave, onClose }) {
                 onChange={(e) => handleServiceChange(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 disabled={form.role === 'admin'}
+                title={form.role === 'admin' ? 'L\'admin a accès à tous les services' : ''}
               >
                 {VALID_SERVICES.map((s) => (
                   <option key={s} value={s}>
@@ -171,7 +167,22 @@ function UserForm({ user, onSave, onClose }) {
 
           {form.role === 'admin' && (
             <p className="text-xs text-blue-600 bg-blue-50 px-3 py-2 rounded-lg">
-              Les comptes Admin ont accès à tous les services.
+              Les comptes Administrateur ont accès à tout le système (réservé au compte local).
+            </p>
+          )}
+          {form.role === 'directeur' && form.service === 'direction_generale' && (
+            <p className="text-xs text-purple-700 bg-purple-50 px-3 py-2 rounded-lg">
+              Directeur en Direction Générale — tous droits sur tous les services.
+            </p>
+          )}
+          {form.role === 'directeur' && form.service !== 'direction_generale' && (
+            <p className="text-xs text-purple-700 bg-purple-50 px-3 py-2 rounded-lg">
+              Directeur — tous droits (créer, modifier, supprimer) sur son service.
+            </p>
+          )}
+          {form.role === 'responsable' && (
+            <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+              Responsable — peut créer et modifier dans son service, mais pas supprimer.
             </p>
           )}
 
@@ -281,7 +292,7 @@ export default function AdminUsersPage() {
               <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-sm">Aucun compte trouvé.</td></tr>
             )}
             {filtered.map((u) => {
-              const role = ROLE_CONFIG[u.role]
+              const role = ROLE_CONFIG[u.role] || { label: u.role, color: 'bg-gray-100 text-gray-600' }
               const svc = u.service || u.pole
               const svcCfg = SERVICE_CONFIG[svc]
               const isSelf = u.id === currentUser?.id

@@ -7,7 +7,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { parseISO, format, getDaysInMonth, differenceInDays, addDays } from 'date-fns'
 import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
-import { SERVICE_CONFIG, VALID_SERVICES, PRIORITY_CONFIG, STATUS_CONFIG } from '../../utils/format'
+import { SERVICE_CONFIG, VALID_SERVICES, PRIORITY_CONFIG, STATUS_CONFIG, canManage } from '../../utils/format'
 import ProjectModal from '../Project/ProjectModal'
 import { taskService } from '../../services/taskService'
 import { projectService } from '../../services/projectService'
@@ -495,7 +495,7 @@ function ProjectRow({ project, year, timelineRef, onBarDrag, onRemoveDates, onTo
 
 function UnplannedChip({ project, onClick }) {
   const user    = useAuthStore((s) => s.user)
-  const canDrag = user?.role === 'admin' || user?.role === 'lead'
+  const canDrag = canManage(user)
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `unplanned-${project.id}`,
@@ -570,7 +570,7 @@ export default function CalendarPage() {
 
   const { projects, fetchProjects, updateProject, filters } = useProjectStore()
   const user    = useAuthStore((s) => s.user)
-  const canDrag = user?.role === 'admin' || user?.role === 'lead'
+  const canDrag = canManage(user)
   const canLink = canDrag
   const timelineRef = useRef()
   const rowsBodyRef = useRef()

@@ -139,7 +139,7 @@ export default function AdminTagsPage() {
 
   // Redirection si simple membre
   useEffect(() => {
-    if (currentUser && currentUser.role === 'member') navigate('/')
+    if (currentUser && currentUser.role === 'membre') navigate('/')
   }, [currentUser])
 
   async function load() {

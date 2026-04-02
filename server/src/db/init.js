@@ -207,4 +207,52 @@ try {
   db.exec(`INSERT OR IGNORE INTO ldap_config (id) VALUES (1)`);
 } catch (_) { /* déjà présent */ }
 
+// ── Migration des rôles : lead → directeur, member → membre ──────────────────
+// SQLite ne permet pas de modifier une contrainte CHECK en place.
+// On recrée la table users avec la nouvelle contrainte via renommage.
+try {
+  const oldRoleCount = db.prepare(
+    "SELECT COUNT(*) as n FROM users WHERE role IN ('lead', 'member')"
+  ).get();
+
+  if (oldRoleCount.n > 0) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users_v2 (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT NOT NULL UNIQUE,
+        email      TEXT NOT NULL UNIQUE,
+        password   TEXT NOT NULL,
+        role       TEXT NOT NULL DEFAULT 'membre'
+                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre')),
+        pole       TEXT CHECK(pole IN ('dev', 'network')),
+        service    TEXT NOT NULL DEFAULT 'dev',
+        ldap_dn    TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      INSERT INTO users_v2 (id, username, email, password, role, pole, service, ldap_dn, created_at)
+      SELECT id, username, email, password,
+        CASE role
+          WHEN 'lead'   THEN 'directeur'
+          WHEN 'member' THEN 'membre'
+          ELSE role
+        END,
+        pole, COALESCE(service, 'dev'), ldap_dn, created_at
+      FROM users
+    `);
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_v2 RENAME TO users');
+    db.exec('PRAGMA foreign_keys = ON');
+    console.log('✅ Migration des rôles effectuée : lead→directeur, member→membre');
+  }
+} catch (err) {
+  try { db.exec('PRAGMA foreign_keys = ON'); } catch (_) {}
+  console.error('⚠️  Migration des rôles :', err.message);
+}
+
+// Assurer la contrainte CHECK sur la table existante si déjà à jour
+// (aucune action requise — la table a déjà la bonne contrainte ou vient d'être migrée)
+
 console.log(`✅ Base de données initialisée : ${dbPath}`);

@@ -95,11 +95,11 @@ function mapLdapGroupsToService(groups) {
     if (cfg.group_dg)      groupMap[cfg.group_dg]      = { service: 'direction_generale' };
     if (cfg.group_tech)    groupMap[cfg.group_tech]    = { service: 'services_techniques' };
     if (cfg.group_achats)  groupMap[cfg.group_achats]  = { service: 'achats' };
-    if (cfg.group_admin)   groupMap[cfg.group_admin]   = { service: 'dev', role: 'admin' };
+    if (cfg.group_admin)   groupMap[cfg.group_admin]   = { service: 'dev', role: 'directeur' };
   }
 
   let service = 'dev';
-  let role = 'member';
+  let role = 'membre';
 
   for (const groupDn of groups) {
     if (groupMap[groupDn]) {

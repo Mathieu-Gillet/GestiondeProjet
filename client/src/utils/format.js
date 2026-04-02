@@ -34,6 +34,36 @@ export const SERVICE_CONFIG = {
 
 export const VALID_SERVICES = Object.keys(SERVICE_CONFIG)
 
+// ── Rôles ──────────────────────────────────────────────────────────────────
+export const ROLE_CONFIG = {
+  admin:       { label: 'Administrateur', color: 'bg-red-100 text-red-700',    description: 'Accès système complet (local uniquement)' },
+  directeur:   { label: 'Directeur',      color: 'bg-purple-100 text-purple-700', description: 'Tous les droits sur son service (ou tous les services si DG)' },
+  responsable: { label: 'Responsable',    color: 'bg-amber-100 text-amber-700',  description: 'Créer et modifier dans son service, pas de suppression' },
+  membre:      { label: 'Membre',         color: 'bg-gray-100 text-gray-600',    description: 'Lecture, commentaires, mise à jour des tâches assignées' },
+}
+
+// Admin système OU Direction Générale → accès complet tous services
+export function hasFullAccess(user) {
+  return user?.role === 'admin' || user?.service === 'direction_generale'
+}
+
+// Peut créer/modifier des projets et tâches (pas forcément supprimer)
+export function canManage(user) {
+  return ['admin', 'directeur', 'responsable'].includes(user?.role)
+}
+
+// Peut supprimer des projets/tâches
+export function canDelete(user) {
+  return ['admin', 'directeur'].includes(user?.role)
+}
+
+// Libellé du rôle affiché à l'utilisateur
+export function roleLabel(user) {
+  if (!user) return ''
+  if (user.service === 'direction_generale' && user.role !== 'admin') return 'Direction Générale'
+  return ROLE_CONFIG[user.role]?.label || user.role
+}
+
 /** Formate une durée en jours + heures → "2j 4h", "3j", "4h", "–" */
 export function formatDuration(days, hours) {
   const d = Number(days) || 0

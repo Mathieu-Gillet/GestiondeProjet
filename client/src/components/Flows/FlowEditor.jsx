@@ -13,6 +13,7 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import useAuthStore from '../../store/authStore'
+import { canManage } from '../../utils/format'
 import flowService from '../../services/flowService'
 import NodePalette from './NodePalette'
 import NodeEditPanel from './NodeEditPanel'
@@ -39,7 +40,7 @@ export default function FlowEditor() {
   const { id }     = useParams()
   const navigate   = useNavigate()
   const user       = useAuthStore((s) => s.user)
-  const canEdit    = user?.role === 'admin' || user?.role === 'lead'
+  const canEdit    = canManage(user)
 
   const [diagram,   setDiagram]   = useState(null)
   const [loading,   setLoading]   = useState(true)

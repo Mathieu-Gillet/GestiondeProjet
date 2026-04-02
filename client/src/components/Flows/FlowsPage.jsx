@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 import useFlowStore from '../../store/flowStore'
+import { canManage } from '../../utils/format'
 
 const POLE_LABELS = { dev: 'Dev', network: 'Réseau', all: 'Tous pôles' }
 const POLE_COLORS = {
@@ -97,7 +98,7 @@ export default function FlowsPage() {
   const [showNew,     setShowNew]     = useState(false)
   const [deleting,    setDeleting]    = useState(null)
 
-  const canEdit = user?.role === 'admin' || user?.role === 'lead'
+  const canEdit = canManage(user)
 
   useEffect(() => { fetchDiagrams() }, [])
 

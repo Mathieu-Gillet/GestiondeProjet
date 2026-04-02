@@ -25,14 +25,30 @@ const moveSchema = z.object({
   position: z.number().int().min(0),
 });
 
-// Mappe un service vers un pole legacy ('dev' ou 'network')
 function serviceToPole(service) {
   return service === 'network' ? 'network' : 'dev';
 }
 
-// Direction Générale et admin peuvent voir tous les services
-function canSeeAllServices(user) {
+// Admin système OU Direction Générale → accès complet tous services
+function hasFullAccess(user) {
   return user.role === 'admin' || user.service === 'direction_generale';
+}
+
+// Peut voir tous les services (DG + admin)
+function canSeeAllServices(user) {
+  return hasFullAccess(user);
+}
+
+// Peut créer/modifier dans un service donné
+function canManageService(user, service) {
+  if (hasFullAccess(user)) return true;
+  return ['directeur', 'responsable'].includes(user.role) && user.service === service;
+}
+
+// Peut supprimer dans un service donné
+function canDeleteInService(user, service) {
+  if (hasFullAccess(user)) return true;
+  return user.role === 'directeur' && user.service === service;
 }
 
 function logActivity(db, projectId, userId, action, detail = null) {
@@ -71,7 +87,6 @@ function list(req, res) {
   let { service, status, priority, search } = req.query;
   const db = getDb();
 
-  // Les membres (non DG, non admin) sont restreints à leur propre service
   if (!canSeeAllServices(req.user)) {
     service = req.user.service || 'dev';
   }
@@ -91,7 +106,6 @@ function list(req, res) {
 
   const projects = db.prepare(query).all(...params);
 
-  // Enrichir avec tags et owner
   const enriched = projects.map(p => {
     p.tags = db.prepare(`
       SELECT t.id, t.name, t.color FROM tags t
@@ -103,7 +117,6 @@ function list(req, res) {
     return p;
   });
 
-  // Enrichir avec les dépendances (une seule requête batch)
   const allDeps = db.prepare('SELECT from_project_id, to_project_id FROM project_dependencies').all();
   enriched.forEach(p => {
     p.successors = allDeps.filter(d => d.from_project_id === p.id).map(d => d.to_project_id);
@@ -117,7 +130,6 @@ function getOne(req, res) {
   const project = getProjectWithRelations(db, req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  // Les membres non-DG ne peuvent voir que leur service
   if (!canSeeAllServices(req.user) && req.user.service && req.user.service !== project.service) {
     return res.status(403).json({ error: 'Accès refusé' });
   }
@@ -134,14 +146,12 @@ function create(req, res) {
   const { title, description, service, owner_id, status, priority, start_date, due_date, member_ids, tag_ids } = result.data;
   const pole = serviceToPole(service);
 
-  // Un lead ne peut créer que dans son service
-  if (req.user.role === 'lead' && req.user.service !== service) {
+  if (!canManageService(req.user, service)) {
     return res.status(403).json({ error: 'Vous ne pouvez créer des projets que dans votre service' });
   }
 
   const db = getDb();
 
-  // Position = dernier dans la colonne
   const maxPos = db.prepare('SELECT MAX(position) as m FROM projects WHERE status = ? AND service = ?').get(status, service);
   const position = (maxPos.m ?? -1) + 1;
 
@@ -152,7 +162,6 @@ function create(req, res) {
 
   const projectId = info.lastInsertRowid;
 
-  // Membres
   const insertMember = db.prepare('INSERT OR IGNORE INTO project_members (project_id, user_id) VALUES (?, ?)');
   const fromUser = db.prepare('SELECT username FROM users WHERE id = ?').get(req.user.id);
   for (const uid of member_ids) {
@@ -171,7 +180,6 @@ function create(req, res) {
     }
   }
 
-  // Tags
   const insertTag = db.prepare('INSERT OR IGNORE INTO project_tags (project_id, tag_id) VALUES (?, ?)');
   for (const tid of tag_ids) insertTag.run(projectId, tid);
 
@@ -187,8 +195,7 @@ function update(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  // Vérification service pour lead
-  if (req.user.role === 'lead' && req.user.service !== project.service) {
+  if (!canManageService(req.user, project.service)) {
     return res.status(403).json({ error: 'Accès limité à votre service' });
   }
 
@@ -203,7 +210,6 @@ function update(req, res) {
 
   const { member_ids, tag_ids, pole: _pole, ...fields } = result.data;
 
-  // Si le service change, recalculer le pole legacy
   if (fields.service) {
     fields.pole = serviceToPole(fields.service);
   }
@@ -223,7 +229,6 @@ function update(req, res) {
     db.prepare(`UPDATE projects SET ${changes.join(', ')} WHERE id = ?`).run(...params);
   }
 
-  // Mise à jour membres
   if (member_ids !== undefined) {
     const oldMemberIds = db.prepare('SELECT user_id FROM project_members WHERE project_id = ?')
       .all(req.params.id).map((r) => r.user_id);
@@ -248,7 +253,6 @@ function update(req, res) {
     }
   }
 
-  // Mise à jour tags
   if (tag_ids !== undefined) {
     db.prepare('DELETE FROM project_tags WHERE project_id = ?').run(req.params.id);
     const ins = db.prepare('INSERT OR IGNORE INTO project_tags (project_id, tag_id) VALUES (?, ?)');
@@ -267,12 +271,12 @@ function remove(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  if (req.user.role === 'lead' && req.user.service !== project.service) {
+  if (!canDeleteInService(req.user, project.service)) {
     return res.status(403).json({ error: 'Accès limité à votre service' });
   }
 
   if (project.status === 'done' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le supprimer.' });
   }
 
   db.prepare('DELETE FROM projects WHERE id = ?').run(req.params.id);
@@ -290,7 +294,7 @@ function move(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  if (req.user.role === 'lead' && req.user.service !== project.service) {
+  if (!canManageService(req.user, project.service)) {
     return res.status(403).json({ error: 'Accès limité à votre service' });
   }
 
@@ -318,7 +322,6 @@ function move(req, res) {
   res.json(moved);
 }
 
-// Commentaires projet (task_id IS NULL)
 function getComments(req, res) {
   const db = getDb();
   const comments = db.prepare(`
@@ -368,7 +371,6 @@ function deleteComment(req, res) {
   res.json({ message: 'Commentaire supprimé' });
 }
 
-// Commentaires de tâche
 function getTaskComments(req, res) {
   const db = getDb();
   const comments = db.prepare(`

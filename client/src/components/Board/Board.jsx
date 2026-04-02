@@ -5,7 +5,7 @@ import ProjectCard from './ProjectCard'
 import ProjectModal from '../Project/ProjectModal'
 import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
-import { POLE_CONFIG, PRIORITY_CONFIG } from '../../utils/format'
+import { POLE_CONFIG, PRIORITY_CONFIG, canManage } from '../../utils/format'
 import { exportService } from '../../services/exportService'
 
 const STATUSES = ['backlog', 'in_progress', 'on_hold', 'done']
@@ -20,8 +20,8 @@ export default function Board() {
   const [boardYear, setBoardYear] = useState(currentYear)
   const isCurrentYear = boardYear === currentYear
 
-  const canDrag    = user?.role === 'admin' || user?.role === 'lead'
-  const canExport  = user?.role === 'admin' || user?.role === 'lead'
+  const canDrag    = canManage(user)
+  const canExport  = canManage(user)
   const [exporting, setExporting] = useState(false)
 
   async function handleExport() {

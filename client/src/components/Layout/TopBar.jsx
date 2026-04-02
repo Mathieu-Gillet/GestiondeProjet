@@ -4,7 +4,7 @@ import useAuthStore from '../../store/authStore'
 import useProjectStore from '../../store/projectStore'
 import ProjectForm from '../Project/ProjectForm'
 import { notificationService } from '../../services/notificationService'
-import { SERVICE_CONFIG, VALID_SERVICES } from '../../utils/format'
+import { SERVICE_CONFIG, VALID_SERVICES, canManage } from '../../utils/format'
 
 const NAV_ITEMS = [
   {
@@ -155,7 +155,7 @@ export default function TopBar() {
   const [showForm, setShowForm] = useState(false)
 
   const isAdmin   = user?.role === 'admin'
-  const canCreate = isAdmin || user?.role === 'lead'
+  const canCreate = canManage(user)
   const canSeeAll = isAdmin || user?.service === 'direction_generale'
   const userService  = user?.service || 'dev'
   const serviceCfg   = SERVICE_CONFIG[userService]
@@ -199,7 +199,7 @@ export default function TopBar() {
           })}
 
           {/* Administration — intégrée dans la nav centrale */}
-          {(isAdmin || user?.role === 'lead') && (
+          {(isAdmin || ['directeur', 'responsable'].includes(user?.role)) && (
             <>
               <div className="w-px h-5 bg-gray-200 mx-1" />
               {isAdmin && (

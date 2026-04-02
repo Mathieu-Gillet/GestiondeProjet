@@ -74,7 +74,7 @@ export default function Sidebar() {
         </div>
 
         {/* Administration */}
-        {(isAdmin || user?.role === 'lead') && (
+        {(isAdmin || ['directeur', 'responsable'].includes(user?.role)) && (
           <div>
             <p className="px-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
               Administration

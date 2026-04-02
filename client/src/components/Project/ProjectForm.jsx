@@ -3,7 +3,7 @@ import useProjectStore from '../../store/projectStore'
 import useAuthStore from '../../store/authStore'
 import { userService } from '../../services/userService'
 import { taskService } from '../../services/taskService'
-import { SERVICE_CONFIG, VALID_SERVICES } from '../../utils/format'
+import { SERVICE_CONFIG, VALID_SERVICES, hasFullAccess } from '../../utils/format'
 
 const PRIORITIES = ['critical', 'high', 'normal', 'low']
 const PRIORITY_LABELS = { critical: 'Critique', high: 'Haute', normal: 'Normale', low: 'Basse' }
@@ -34,8 +34,8 @@ export default function ProjectForm({ project, onClose }) {
   const [formTasks, setFormTasks]     = useState([])
   const [newTaskInput, setNewTaskInput] = useState(EMPTY_TASK_INPUT)
 
-  const defaultService = user?.role === 'lead' ? (user.service || user.pole || 'dev') : (user?.service || 'dev')
-  const canChangeService = user?.role === 'admin' || user?.service === 'direction_generale'
+  const defaultService = hasFullAccess(user) ? (user?.service || 'dev') : (user?.service || user?.pole || 'dev')
+  const canChangeService = hasFullAccess(user)
 
   const [form, setForm] = useState({
     title:          project?.title || '',

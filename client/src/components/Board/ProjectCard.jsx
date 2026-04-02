@@ -1,6 +1,6 @@
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
-import { PRIORITY_CONFIG, POLE_CONFIG, formatDate, isOverdue } from '../../utils/format'
+import { PRIORITY_CONFIG, POLE_CONFIG, formatDate, isOverdue, canManage } from '../../utils/format'
 import useAuthStore from '../../store/authStore'
 
 const PRIORITY_BORDER = {
@@ -12,7 +12,7 @@ const PRIORITY_BORDER = {
 
 export default function ProjectCard({ project, onClick, isDragging = false }) {
   const user = useAuthStore((s) => s.user)
-  const canDrag = user?.role === 'admin' || user?.role === 'lead'
+  const canDrag = canManage(user)
 
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: project.id,

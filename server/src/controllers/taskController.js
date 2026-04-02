@@ -67,8 +67,9 @@ function create(req, res) {
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Projet introuvable' });
 
-  if (project.status === 'done' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  const canBypassArchive = req.user.role === 'admin' || req.user.service === 'direction_generale';
+  if (project.status === 'done' && !canBypassArchive) {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur ou la Direction Générale peut le modifier.' });
   }
 
   const { title, duration_days, duration_hours, status, start_date, due_date, depends_on, assigned_to, notes, earliest_start, latest_end } = result.data;
@@ -130,8 +131,9 @@ function update(req, res) {
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
   const projectForArchive = db.prepare('SELECT status FROM projects WHERE id = ?').get(req.params.id);
-  if (projectForArchive?.status === 'done' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  const canBypassArchiveUpd = req.user.role === 'admin' || req.user.service === 'direction_generale';
+  if (projectForArchive?.status === 'done' && !canBypassArchiveUpd) {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur ou la Direction Générale peut le modifier.' });
   }
 
   const { title, duration_days, duration_hours, status, start_date, due_date, depends_on, assigned_to, notes, earliest_start, latest_end } = result.data;
@@ -225,7 +227,7 @@ function updateStatus(req, res) {
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
   // Un membre ne peut mettre à jour que ses propres tâches
-  const isMember = req.user?.role === 'member';
+  const isMember = req.user?.role === 'membre';
   if (isMember && task.assigned_to !== req.user.id) {
     return res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres tâches.' });
   }
@@ -262,8 +264,9 @@ function remove(req, res) {
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
   const projectForArchive = db.prepare('SELECT status FROM projects WHERE id = ?').get(req.params.id);
-  if (projectForArchive?.status === 'done' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur peut le modifier.' });
+  const canBypassArchiveDel = req.user.role === 'admin' || req.user.service === 'direction_generale';
+  if (projectForArchive?.status === 'done' && !canBypassArchiveDel) {
+    return res.status(403).json({ error: 'Ce projet est archivé. Seul un administrateur ou la Direction Générale peut le modifier.' });
   }
 
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.taskId);
@@ -281,7 +284,7 @@ function patchNotes(req, res) {
     .get(req.params.taskId, req.params.id);
   if (!task) return res.status(404).json({ error: 'Tâche introuvable' });
 
-  if (req.user?.role === 'member' && task.assigned_to !== req.user.id) {
+  if (req.user?.role === 'membre' && task.assigned_to !== req.user.id) {
     return res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres tâches.' });
   }
 
