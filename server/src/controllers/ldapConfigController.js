@@ -189,7 +189,8 @@ async function searchUsers(req, res) {
 async function importUsers(req, res) {
   if (!requireLocalAdmin(req, res)) return;
 
-  // Accepte { users: [{dn, service, role}] } ou le format legacy { dns: [...] }
+  // Accepte { users: [{dn, username, email, displayName, service, role}] }
+  // ou le format legacy { dns: [...] }
   let usersToImport = [];
   if (Array.isArray(req.body.users) && req.body.users.length > 0) {
     usersToImport = req.body.users;
@@ -206,66 +207,87 @@ async function importUsers(req, res) {
   const VALID_SERVICES = ['dev', 'network', 'rh', 'direction_generale', 'services_techniques', 'achats'];
   const VALID_ROLES    = ['directeur', 'responsable', 'membre'];
 
-  const cfg = getLdapConfig();
-  if (!cfg) {
-    return res.status(503).json({ error: 'LDAP non configuré ou désactivé' });
-  }
+  const db = getDb();
+  const results = { created: 0, updated: 0, skipped: 0, errors: [] };
 
-  try {
-    const dns = usersToImport.map((u) => u.dn);
-    // Récupérer les données LDAP pour les DN demandés
-    const allUsers = await searchLdapUsers('', cfg);
-    const ldapByDn = Object.fromEntries(allUsers.map((u) => [u.dn, u]));
+  for (const item of usersToImport) {
+    if (!item.dn || typeof item.dn !== 'string') {
+      results.errors.push({ dn: item.dn, error: 'DN invalide' });
+      results.skipped++;
+      continue;
+    }
 
-    const db = getDb();
-    const results = { created: 0, updated: 0, skipped: 0, errors: [] };
+    try {
+      // Utiliser les données fournies par le client (déjà récupérées depuis l'annuaire)
+      const service  = (item.service  && VALID_SERVICES.includes(item.service))  ? item.service  : 'dev';
+      const role     = (item.role     && VALID_ROLES.includes(item.role))         ? item.role     : 'membre';
+      const pole     = service === 'network' ? 'network' : 'dev';
+      const username = item.username ? String(item.username).replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50) : null;
+      const email    = item.email    ? String(item.email).slice(0, 254)    : null;
 
-    for (const item of usersToImport) {
-      const ldapUser = ldapByDn[item.dn];
-      if (!ldapUser) {
-        results.errors.push({ dn: item.dn, error: 'Utilisateur introuvable dans l\'annuaire' });
+      if (!username) {
+        results.errors.push({ dn: item.dn, error: 'Nom d\'utilisateur manquant' });
         results.skipped++;
         continue;
       }
 
-      try {
-        // Utiliser le service/rôle fourni par le client si valide, sinon recalculer depuis les groupes AD
-        const groupMapped = mapLdapGroupsToService(ldapUser.groups);
-        const service = (item.service && VALID_SERVICES.includes(item.service)) ? item.service : groupMapped.service;
-        const role    = (item.role    && VALID_ROLES.includes(item.role))       ? item.role    : groupMapped.role;
-        const pole    = service === 'network' ? 'network' : 'dev';
+      const existing = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(item.dn)
+        || db.prepare('SELECT * FROM users WHERE username = ?').get(username)
+        || (email ? db.prepare('SELECT * FROM users WHERE email = ?').get(email) : null);
 
-        const existing = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(ldapUser.dn)
-          || db.prepare('SELECT * FROM users WHERE username = ?').get(ldapUser.username)
-          || (ldapUser.email ? db.prepare('SELECT * FROM users WHERE email = ?').get(ldapUser.email) : null);
-
-        if (existing) {
-          db.prepare('UPDATE users SET service = ?, pole = ?, role = ?, ldap_dn = ?, email = ? WHERE id = ?')
-            .run(service, pole, role, ldapUser.dn, ldapUser.email || existing.email, existing.id);
-          results.updated++;
-        } else {
-          const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
-          const safeUsername = ldapUser.username.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50);
-          db.prepare(`
-            INSERT INTO users (username, email, password, role, pole, service, ldap_dn)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).run(safeUsername, ldapUser.email || `${safeUsername}@ldap`, fakeHash, role, pole, service, ldapUser.dn);
-          results.created++;
-        }
-      } catch (err) {
-        results.errors.push({ dn: ldapUser.dn, error: err.message });
-        results.skipped++;
+      if (existing) {
+        db.prepare('UPDATE users SET username = ?, service = ?, pole = ?, role = ?, ldap_dn = ?, email = ? WHERE id = ?')
+          .run(username, service, pole, role, item.dn, email || existing.email, existing.id);
+        results.updated++;
+      } else {
+        const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
+        const safeEmail = email || `${username}@ldap.local`;
+        db.prepare(`
+          INSERT INTO users (username, email, password, role, pole, service, ldap_dn)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(username, safeEmail, fakeHash, role, pole, service, item.dn);
+        results.created++;
       }
+    } catch (err) {
+      results.errors.push({ dn: item.dn, error: err.message });
+      results.skipped++;
     }
-
-    res.json({
-      message: `Import terminé : ${results.created} créé(s), ${results.updated} mis à jour, ${results.skipped} ignoré(s)`,
-      ...results,
-    });
-  } catch (err) {
-    console.error('LDAP import error:', err.message);
-    res.status(400).json({ error: err.message });
   }
+
+  res.json({
+    message: `Import terminé : ${results.created} créé(s), ${results.updated} mis à jour, ${results.skipped} ignoré(s)`,
+    ...results,
+  });
 }
 
-module.exports = { getConfig, saveConfig, testConfig, searchUsers, importUsers };
+// Lister les utilisateurs déjà importés depuis LDAP
+function getImportedUsers(req, res) {
+  if (!requireLocalAdmin(req, res)) return;
+
+  const db = getDb();
+  const q = (req.query.q || '').toString().trim().slice(0, 100);
+
+  let rows;
+  if (q) {
+    rows = db.prepare(`
+      SELECT id, username, email, role, service, ldap_dn, created_at
+      FROM users
+      WHERE ldap_dn IS NOT NULL
+        AND (username LIKE ? OR email LIKE ?)
+      ORDER BY username
+      LIMIT 200
+    `).all(`%${q}%`, `%${q}%`);
+  } else {
+    rows = db.prepare(`
+      SELECT id, username, email, role, service, ldap_dn, created_at
+      FROM users
+      WHERE ldap_dn IS NOT NULL
+      ORDER BY username
+      LIMIT 500
+    `).all();
+  }
+
+  res.json({ users: rows, total: rows.length });
+}
+
+module.exports = { getConfig, saveConfig, testConfig, searchUsers, importUsers, getImportedUsers };

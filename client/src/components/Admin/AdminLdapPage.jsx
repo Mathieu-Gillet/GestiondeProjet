@@ -71,13 +71,18 @@ export default function AdminLdapPage() {
           label="Configuration"
         />
         <TabButton active={tab === 'import'} onClick={() => setTab('import')}
-          icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />}
+          icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />}
           label="Importer des utilisateurs"
+        />
+        <TabButton active={tab === 'imported'} onClick={() => setTab('imported')}
+          icon={<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />}
+          label="Utilisateurs importés"
         />
       </div>
 
-      {tab === 'config' && <ConfigTab />}
-      {tab === 'import' && <ImportTab />}
+      {tab === 'config'   && <ConfigTab />}
+      {tab === 'import'   && <ImportTab />}
+      {tab === 'imported' && <ImportedUsersTab />}
     </div>
   )
 }
@@ -418,13 +423,17 @@ function ImportTab() {
     setImporting(true)
     setImportResult(null)
     try {
-      // Envoyer service et rôle effectifs (avec surcharges) pour chaque utilisateur sélectionné
+      // Envoyer toutes les données connues (username, email…) pour éviter
+      // un re-fetch LDAP côté serveur qui peut échouer avec sizeLimit > 200
       const usersPayload = Array.from(selected).map((dn) => {
         const u = users.find((u) => u.dn === dn)
         return {
           dn,
-          service: effectiveService(u, overrides),
-          role:    effectiveRole(u, overrides),
+          username:    u?.username    || '',
+          email:       u?.email       || '',
+          displayName: u?.displayName || '',
+          service:     effectiveService(u, overrides),
+          role:        effectiveRole(u, overrides),
         }
       })
       const r = await api.post('/admin/ldap/import', { users: usersPayload })
@@ -711,6 +720,149 @@ function ImportTab() {
         </div>
       )}
     </div>
+  )
+}
+
+/* ─────────────────────── Onglet Utilisateurs importés ──────────────────────── */
+
+function ImportedUsersTab() {
+  const [search, setSearch]   = useState('')
+  const [query, setQuery]     = useState('')
+  const [users, setUsers]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    fetchUsers(query)
+  }, [query])
+
+  async function fetchUsers(q) {
+    setLoading(true)
+    setError(null)
+    try {
+      const r = await api.get('/admin/ldap/imported', { params: { q } })
+      setUsers(r.data.users || [])
+    } catch (e) {
+      setError(e.response?.data?.error || 'Erreur de chargement')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleSearch(e) {
+    e.preventDefault()
+    setQuery(search.trim())
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Barre de recherche */}
+      <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">Utilisateurs importés depuis l'annuaire</h2>
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher par identifiant ou email..."
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <button
+            type="submit"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Rechercher
+          </button>
+          {query && (
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setQuery('') }}
+              className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+            >
+              Effacer
+            </button>
+          )}
+        </div>
+      </form>
+
+      {error && <ErrorBox message={error} />}
+
+      {loading ? (
+        <Spinner text="Chargement des utilisateurs importés..." />
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+            <span className="text-sm text-gray-600 font-medium">
+              {users.length} utilisateur{users.length !== 1 ? 's' : ''} importé{users.length !== 1 ? 's' : ''}
+              {query ? ` pour "${query}"` : ''}
+            </span>
+          </div>
+
+          {users.length === 0 ? (
+            <div className="py-12 text-center text-gray-400 text-sm">
+              {query
+                ? 'Aucun utilisateur importé ne correspond à cette recherche.'
+                : 'Aucun utilisateur importé depuis l\'annuaire pour l\'instant.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    <th className="px-4 py-3 text-left">Identifiant</th>
+                    <th className="px-4 py-3 text-left">Email</th>
+                    <th className="px-4 py-3 text-left">Service</th>
+                    <th className="px-4 py-3 text-left">Rôle</th>
+                    <th className="px-4 py-3 text-left">DN LDAP</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {users.map((u) => (
+                    <tr key={u.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-xs text-gray-900">{u.username}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500">{u.email || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                          {SERVICE_LABELS[u.service] || u.service}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <RoleBadge role={u.role} />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-400 max-w-xs truncate" title={u.ldap_dn}>
+                        {u.ldap_dn}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RoleBadge({ role }) {
+  const colors = {
+    directeur:   'bg-purple-100 text-purple-700',
+    responsable: 'bg-amber-100 text-amber-700',
+    membre:      'bg-gray-100 text-gray-600',
+    admin:       'bg-red-100 text-red-700',
+  }
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[role] || 'bg-gray-100 text-gray-600'}`}>
+      {role}
+    </span>
   )
 }
 
