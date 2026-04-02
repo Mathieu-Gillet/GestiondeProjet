@@ -192,6 +192,7 @@ db.exec(`
     user_search_base        TEXT,
     user_search_filter      TEXT NOT NULL DEFAULT '(sAMAccountName={{username}})',
     tls_reject_unauthorized INTEGER NOT NULL DEFAULT 1,
+    use_starttls            INTEGER NOT NULL DEFAULT 0,
     group_dev               TEXT,
     group_network           TEXT,
     group_rh                TEXT,

@@ -77,6 +77,7 @@ try {
       user_search_base        TEXT,
       user_search_filter      TEXT NOT NULL DEFAULT '(sAMAccountName={{username}})',
       tls_reject_unauthorized INTEGER NOT NULL DEFAULT 1,
+      use_starttls            INTEGER NOT NULL DEFAULT 0,
       group_dev               TEXT,
       group_network           TEXT,
       group_rh                TEXT,
@@ -92,6 +93,10 @@ try {
 } catch (err) {
   console.log('ℹ️  Migration ldap_config :', err.message);
 }
+// Ajout de use_starttls sur une table ldap_config déjà existante
+try {
+  db.exec(`ALTER TABLE ldap_config ADD COLUMN use_starttls INTEGER NOT NULL DEFAULT 0`);
+} catch (_) { /* colonne déjà présente */ }
 
 // ── Migration des rôles : lead → directeur, member → membre ──────────────────
 // SQLite ne permettant pas de modifier une contrainte CHECK, on recrée la table.

@@ -100,6 +100,14 @@ async function ldapLogin(req, res) {
     if (err.message === 'LDAP non configuré sur le serveur') {
       return res.status(503).json({ error: 'Authentification LDAP non disponible' });
     }
+    // Erreurs de connexion serveur (ECONNRESET, timeout, TLS…) → 503
+    const isServerError = err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')
+      || err.message.includes('délai') || err.message.includes('introuvable')
+      || err.message.includes('certificat') || err.message.includes('STARTTLS');
+    if (isServerError) {
+      return res.status(503).json({ error: err.message });
+    }
+    // Erreur d'authentification (mauvais mot de passe, utilisateur inconnu)
     return res.status(401).json({ error: 'Identifiants invalides ou accès refusé' });
   }
 }

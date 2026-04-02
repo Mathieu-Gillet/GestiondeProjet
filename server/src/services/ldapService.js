@@ -1,6 +1,43 @@
 // ldapts is ESM-only (v4+). We load it with dynamic import() from this CJS module.
 const { getDb } = require('../db/database');
 
+// Traduit les erreurs réseau bas niveau en messages compréhensibles
+function translateLdapError(err) {
+  const msg = err.message || '';
+  if (msg.includes('ECONNRESET')) {
+    return new Error(
+      'Connexion réinitialisée par le serveur AD (ECONNRESET). ' +
+      'Causes fréquentes : mauvais protocole/port (ldap:// sur 636 ou ldaps:// sur 389), ' +
+      'ou le serveur requiert STARTTLS — activez l\'option STARTTLS dans la configuration.'
+    );
+  }
+  if (msg.includes('ECONNREFUSED')) {
+    return new Error(
+      'Connexion refusée (ECONNREFUSED) : vérifiez l\'adresse et le port du serveur LDAP.'
+    );
+  }
+  if (msg.includes('ETIMEDOUT') || msg.includes('ETIMEOUT') || msg.includes('timed out')) {
+    return new Error(
+      'Délai de connexion dépassé : le serveur LDAP est inaccessible ou un pare-feu bloque le port.'
+    );
+  }
+  if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+    return new Error(
+      'Nom de serveur introuvable : vérifiez l\'adresse du serveur LDAP (DNS ou IP).'
+    );
+  }
+  if (msg.includes('certificate') || msg.includes('self signed') || msg.includes('CERT_') || msg.includes('ERR_TLS')) {
+    return new Error(
+      'Erreur de certificat TLS. Si vous utilisez un certificat auto-signé, ' +
+      'décochez "Vérifier le certificat TLS" dans la configuration.'
+    );
+  }
+  if (msg.includes('InvalidCredentials') || msg.includes('49 ')) {
+    return new Error('Identifiants du compte de service incorrects (code LDAP 49).');
+  }
+  return err;
+}
+
 // Escape special characters in LDAP filter values (RFC 4515)
 function escapeFilter(str) {
   return String(str)
@@ -44,8 +81,13 @@ async function authenticateWithLdap(username, password) {
   });
 
   try {
+    // STARTTLS : montée en TLS sur une connexion ldap:// (port 389)
+    if (cfg.use_starttls) {
+      await client.startTLS(tlsOptions).catch((e) => { throw translateLdapError(e); });
+    }
+
     // 1. Bind avec le compte de service pour chercher l'utilisateur
-    await client.bind(cfg.bind_dn, cfg.bind_password || '');
+    await client.bind(cfg.bind_dn, cfg.bind_password || '').catch((e) => { throw translateLdapError(e); });
 
     // 2. Rechercher le DN de l'utilisateur
     const filterTemplate = cfg.user_search_filter || '(sAMAccountName={{username}})';
@@ -131,7 +173,10 @@ async function testLdapConnection(cfg) {
   });
 
   try {
-    await client.bind(cfg.bind_dn, cfg.bind_password || '');
+    if (cfg.use_starttls) {
+      await client.startTLS(tlsOptions).catch((e) => { throw translateLdapError(e); });
+    }
+    await client.bind(cfg.bind_dn, cfg.bind_password || '').catch((e) => { throw translateLdapError(e); });
     return { success: true, message: 'Connexion LDAP réussie' };
   } finally {
     await client.unbind();
@@ -156,7 +201,10 @@ async function searchLdapUsers(searchTerm, cfg) {
   });
 
   try {
-    await client.bind(cfg.bind_dn, cfg.bind_password || '');
+    if (cfg.use_starttls) {
+      await client.startTLS(tlsOptions).catch((e) => { throw translateLdapError(e); });
+    }
+    await client.bind(cfg.bind_dn, cfg.bind_password || '').catch((e) => { throw translateLdapError(e); });
 
     const searchBase = cfg.user_search_base || cfg.base_dn;
 

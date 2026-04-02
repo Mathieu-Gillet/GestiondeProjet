@@ -31,6 +31,7 @@ const defaultForm = {
   user_search_base: '',
   user_search_filter: '(sAMAccountName={{username}})',
   tls_reject_unauthorized: true,
+  use_starttls: false,
   group_dev: '',
   group_network: '',
   group_rh: '',
@@ -123,6 +124,7 @@ function ConfigTab() {
           user_search_base:        data.user_search_base || '',
           user_search_filter:      data.user_search_filter || '(sAMAccountName={{username}})',
           tls_reject_unauthorized: data.tls_reject_unauthorized ?? true,
+          use_starttls:            data.use_starttls ?? false,
           group_dev:               data.group_dev || '',
           group_network:           data.group_network || '',
           group_rh:                data.group_rh || '',
@@ -248,13 +250,21 @@ function ConfigTab() {
           <input type="text" value={form.base_dn} onChange={(e) => set('base_dn', e.target.value)}
             placeholder="DC=monentreprise,DC=local" className={inputClass} />
         </Field>
-        <Field label="Certificat TLS">
-          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer mt-1">
-            <input type="checkbox" checked={form.tls_reject_unauthorized}
-              onChange={(e) => set('tls_reject_unauthorized', e.target.checked)}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-            Vérifier le certificat TLS (décocher pour les certificats auto-signés)
-          </label>
+        <Field label="Options TLS">
+          <div className="space-y-2 mt-1">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.tls_reject_unauthorized}
+                onChange={(e) => set('tls_reject_unauthorized', e.target.checked)}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              Vérifier le certificat TLS (décocher pour les certificats auto-signés)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={form.use_starttls}
+                onChange={(e) => set('use_starttls', e.target.checked)}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              Utiliser STARTTLS (montée en TLS sur ldap:// port 389 — à activer si vous obtenez ECONNRESET)
+            </label>
+          </div>
         </Field>
       </Section>
 
