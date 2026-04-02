@@ -59,8 +59,26 @@ async function ldapLogin(req, res) {
 
   const { username, password } = result.data;
 
+  // Phase 1 : authentification LDAP (peut lever une erreur réseau ou d'identifiants)
+  let ldapUser;
   try {
-    const ldapUser = await authenticateWithLdap(username, password);
+    ldapUser = await authenticateWithLdap(username, password);
+  } catch (err) {
+    console.error('LDAP auth error:', err.message);
+    if (err.message === 'LDAP non configuré sur le serveur') {
+      return res.status(503).json({ error: 'Authentification LDAP non disponible' });
+    }
+    const isServerError = err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')
+      || err.message.includes('délai') || err.message.includes('introuvable')
+      || err.message.includes('certificat') || err.message.includes('STARTTLS');
+    if (isServerError) {
+      return res.status(503).json({ error: err.message });
+    }
+    return res.status(401).json({ error: 'Identifiants invalides ou accès refusé' });
+  }
+
+  // Phase 2 : mise à jour / création en base (erreur interne si échec)
+  try {
     const { service, role } = mapLdapGroupsToService(ldapUser.groups);
     const pole = service === 'network' ? 'network' : 'dev';
 
@@ -75,11 +93,17 @@ async function ldapLogin(req, res) {
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
     } else {
       const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
-      const safeUsername = ldapUser.username.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 50);
+      let safeUsername = ldapUser.username.replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
+      // Résoudre les conflits de username
+      let suffix = 1;
+      while (db.prepare('SELECT id FROM users WHERE username = ?').get(safeUsername)) {
+        safeUsername = `${ldapUser.username.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 46)}_${suffix++}`;
+      }
+      const safeEmail = ldapUser.email || `${safeUsername}@ldap.local`;
       const info = db.prepare(`
         INSERT INTO users (username, email, password, role, pole, service, ldap_dn)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(safeUsername, ldapUser.email || `${safeUsername}@ldap`, fakeHash, role, pole, service, ldapUser.dn);
+      `).run(safeUsername, safeEmail, fakeHash, role, pole, service, ldapUser.dn);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     }
 
@@ -93,22 +117,12 @@ async function ldapLogin(req, res) {
         role: user.role,
         pole: user.pole,
         service: user.service || 'dev',
+        ldap_dn: user.ldap_dn || null,
       },
     });
   } catch (err) {
-    console.error('LDAP login error:', err.message);
-    if (err.message === 'LDAP non configuré sur le serveur') {
-      return res.status(503).json({ error: 'Authentification LDAP non disponible' });
-    }
-    // Erreurs de connexion serveur (ECONNRESET, timeout, TLS…) → 503
-    const isServerError = err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')
-      || err.message.includes('délai') || err.message.includes('introuvable')
-      || err.message.includes('certificat') || err.message.includes('STARTTLS');
-    if (isServerError) {
-      return res.status(503).json({ error: err.message });
-    }
-    // Erreur d'authentification (mauvais mot de passe, utilisateur inconnu)
-    return res.status(401).json({ error: 'Identifiants invalides ou accès refusé' });
+    console.error('LDAP login DB error:', err.message);
+    return res.status(500).json({ error: `Erreur interne lors de la connexion : ${err.message}` });
   }
 }
 

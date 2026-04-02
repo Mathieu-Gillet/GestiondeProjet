@@ -13,7 +13,7 @@ function authenticate(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const db = getDb();
-    const user = db.prepare('SELECT id, username, email, role, pole, service FROM users WHERE id = ?').get(payload.userId);
+    const user = db.prepare('SELECT id, username, email, role, pole, service, ldap_dn FROM users WHERE id = ?').get(payload.userId);
 
     if (!user) {
       return res.status(401).json({ error: 'Utilisateur introuvable' });

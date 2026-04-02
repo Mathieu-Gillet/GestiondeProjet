@@ -28,9 +28,13 @@ const useAuthStore = create((set) => ({
     try {
       const user = await authService.me()
       set({ user })
-    } catch {
-      localStorage.removeItem('token')
-      set({ token: null, user: null })
+    } catch (err) {
+      // Déconnecter uniquement si le token est explicitement invalide (401)
+      // Ne pas déconnecter sur une erreur réseau passagère
+      if (err?.response?.status === 401) {
+        localStorage.removeItem('token')
+        set({ token: null, user: null })
+      }
     }
   },
 }))
