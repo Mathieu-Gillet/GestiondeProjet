@@ -47,3 +47,96 @@ for (const m of migrations) {
     console.log(`ℹ️  Migration ${m.name} déjà présente.`);
   }
 }
+
+// ── Colonnes service / ldap_dn (idempotentes) ─────────────────────────────────
+const columnMigrations = [
+  `ALTER TABLE users    ADD COLUMN service TEXT NOT NULL DEFAULT 'dev'`,
+  `ALTER TABLE projects ADD COLUMN service TEXT NOT NULL DEFAULT 'dev'`,
+  `ALTER TABLE users    ADD COLUMN azure_oid TEXT`,
+  `ALTER TABLE users    RENAME COLUMN azure_oid TO ldap_dn`,
+  `ALTER TABLE users    ADD COLUMN ldap_dn TEXT`,
+];
+for (const sql of columnMigrations) {
+  try { db.exec(sql); } catch (_) { /* déjà présente */ }
+}
+try {
+  db.exec(`UPDATE users    SET service = pole WHERE pole IS NOT NULL AND service = 'dev' AND pole != 'dev'`);
+  db.exec(`UPDATE projects SET service = pole WHERE pole IS NOT NULL AND service = 'dev' AND pole != 'dev'`);
+} catch (_) {}
+
+// ── Table ldap_config (idempotente) ───────────────────────────────────────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ldap_config (
+      id                      INTEGER PRIMARY KEY CHECK(id = 1),
+      enabled                 INTEGER NOT NULL DEFAULT 0,
+      url                     TEXT,
+      base_dn                 TEXT,
+      bind_dn                 TEXT,
+      bind_password           TEXT,
+      user_search_base        TEXT,
+      user_search_filter      TEXT NOT NULL DEFAULT '(sAMAccountName={{username}})',
+      tls_reject_unauthorized INTEGER NOT NULL DEFAULT 1,
+      group_dev               TEXT,
+      group_network           TEXT,
+      group_rh                TEXT,
+      group_dg                TEXT,
+      group_tech              TEXT,
+      group_achats            TEXT,
+      group_admin             TEXT,
+      updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  db.exec(`INSERT OR IGNORE INTO ldap_config (id) VALUES (1)`);
+  console.log('✅ Migration : ldap_config appliquée.');
+} catch (err) {
+  console.log('ℹ️  Migration ldap_config :', err.message);
+}
+
+// ── Migration des rôles : lead → directeur, member → membre ──────────────────
+// SQLite ne permettant pas de modifier une contrainte CHECK, on recrée la table.
+try {
+  const oldRoleCount = db.prepare(
+    "SELECT COUNT(*) as n FROM users WHERE role IN ('lead', 'member')"
+  ).get();
+
+  if (oldRoleCount.n > 0) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users_v2 (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        username   TEXT NOT NULL UNIQUE,
+        email      TEXT NOT NULL UNIQUE,
+        password   TEXT NOT NULL,
+        role       TEXT NOT NULL DEFAULT 'membre'
+                   CHECK(role IN ('admin', 'directeur', 'responsable', 'membre')),
+        pole       TEXT CHECK(pole IN ('dev', 'network')),
+        service    TEXT NOT NULL DEFAULT 'dev',
+        ldap_dn    TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      INSERT INTO users_v2 (id, username, email, password, role, pole, service, ldap_dn, created_at)
+      SELECT id, username, email, password,
+        CASE role
+          WHEN 'lead'   THEN 'directeur'
+          WHEN 'member' THEN 'membre'
+          ELSE role
+        END,
+        pole, COALESCE(service, 'dev'), ldap_dn, created_at
+      FROM users
+    `);
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_v2 RENAME TO users');
+    db.exec('PRAGMA foreign_keys = ON');
+    console.log('✅ Migration des rôles : lead→directeur, member→membre');
+  } else {
+    console.log('ℹ️  Migration des rôles déjà appliquée.');
+  }
+} catch (err) {
+  try { db.exec('PRAGMA foreign_keys = ON'); } catch (_) {}
+  console.log('ℹ️  Migration des rôles :', err.message);
+}
+
+console.log('✅ Migrations terminées.');
