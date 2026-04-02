@@ -17,10 +17,10 @@ services:
       - "${HOST_PORT:-3000}:3000"
 
     volumes:
-      # Persistance de la base SQLite
-      - it-tracker-data:/app/data
+      # Persistance sur chemin fixe défini par l'infrastructure
+      - /opt/docker/data/gprojet:/app/data
       # Persistance des logs (auth.log, etc.)
-      - it-tracker-logs:/app/logs
+      - /opt/docker/data/gprojet/logs:/app/logs
 
     environment:
       NODE_ENV: production
@@ -61,8 +61,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-volumes:
-  it-tracker-data:
-    driver: local
-  it-tracker-logs:
-    driver: local

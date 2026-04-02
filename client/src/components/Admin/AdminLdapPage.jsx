@@ -49,7 +49,7 @@ export default function AdminLdapPage() {
   const [tab, setTab] = useState('config')
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-6">
       {/* En-tête */}
       <div className="mb-5">
         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">

@@ -95,22 +95,23 @@ async function ldapLogin(req, res) {
 
   // Phase 2 : mise à jour / création en base (erreur interne si échec)
   try {
-    const { service, role } = mapLdapGroupsToService(ldapUser.groups);
-    const pole = service === 'network' ? 'network' : 'dev';
-
     const db = getDb();
     let user = db.prepare('SELECT * FROM users WHERE ldap_dn = ?').get(ldapUser.dn)
               || db.prepare('SELECT * FROM users WHERE username = ?').get(ldapUser.username)
               || (ldapUser.email ? db.prepare('SELECT * FROM users WHERE email = ?').get(ldapUser.email) : null);
 
     if (user) {
-      db.prepare('UPDATE users SET service = ?, pole = ?, ldap_dn = ? WHERE id = ?')
-        .run(service, pole, ldapUser.dn, user.id);
+      // Utilisateur déjà connu : on ne touche PAS au service/rôle/pole définis lors de l'import.
+      // On synchronise uniquement ldap_dn (cas où trouvé par username/email) et email.
+      db.prepare('UPDATE users SET ldap_dn = ?, email = ? WHERE id = ?')
+        .run(ldapUser.dn, ldapUser.email || user.email, user.id);
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
     } else {
+      // Première connexion sans import préalable : créer avec mapping AD
+      const { service, role } = mapLdapGroupsToService(ldapUser.groups);
+      const pole = service === 'network' ? 'network' : 'dev';
       const fakeHash = bcrypt.hashSync(Math.random().toString(36) + Date.now(), 8);
       let safeUsername = ldapUser.username.replace(/[^a-zA-Z0-9_.-]/g, '_').replace(/^_+|_+$/g, '').slice(0, 50);
-      // Résoudre les conflits de username
       let suffix = 1;
       while (db.prepare('SELECT id FROM users WHERE username = ?').get(safeUsername)) {
         safeUsername = `${ldapUser.username.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 46)}_${suffix++}`;
