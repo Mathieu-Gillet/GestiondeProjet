@@ -19,11 +19,14 @@ services:
     volumes:
       # Persistance de la base SQLite
       - it-tracker-data:/app/data
+      # Persistance des logs (auth.log, etc.)
+      - it-tracker-logs:/app/logs
 
     environment:
       NODE_ENV: production
       PORT: 3000
       DB_PATH: /app/data/tracker.db
+      LOG_DIR: /app/logs
 
       # JWT — obligatoire, changer en production
       JWT_SECRET: ${JWT_SECRET:?Définir JWT_SECRET dans docker/.env}
@@ -60,4 +63,6 @@ services:
       start_period: 15s
 volumes:
   it-tracker-data:
+    driver: local
+  it-tracker-logs:
     driver: local

@@ -13,6 +13,10 @@ DATA_DIR="$(dirname "$DB_FILE")"
 mkdir -p "$DATA_DIR"
 chown -R appuser:appgroup "$DATA_DIR"
 
+LOG_DIR="${LOG_DIR:-/app/logs}"
+mkdir -p "$LOG_DIR"
+chown -R appuser:appgroup "$LOG_DIR"
+
 # ── Initialisation ou migration de la base (exécuté en tant qu'appuser) ───────
 if [ ! -f "$DB_FILE" ]; then
   echo "🗄️  Première initialisation de la base de données..."

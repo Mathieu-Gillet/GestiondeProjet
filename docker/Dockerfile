@@ -30,14 +30,14 @@ COPY server/ .
 # Frontend compilé → servi statiquement par Express
 COPY --from=frontend-build /app/client/dist ./public
 
-# Répertoire de données SQLite (le volume sera monté ici)
-RUN mkdir -p /app/data
+# Répertoires de données SQLite et logs (les volumes seront montés ici)
+RUN mkdir -p /app/data /app/logs
 
 # Entrypoint (s'exécute en root pour corriger les permissions du volume)
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
-VOLUME ["/app/data"]
+VOLUME ["/app/data", "/app/logs"]
 EXPOSE 3000
 
 # Pas de USER ici : l'entrypoint tourne en root, corrige /app/data,

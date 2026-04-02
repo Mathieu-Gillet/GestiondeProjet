@@ -3,6 +3,11 @@ const jwt = require('jsonwebtoken');
 const { z } = require('zod');
 const { getDb } = require('../db/database');
 const { authenticateWithLdap, mapLdapGroupsToService } = require('../services/ldapService');
+const authLogger = require('../services/authLogger');
+
+function getIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+}
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -24,18 +29,24 @@ function login(req, res) {
   }
 
   const { username, password } = result.data;
+  const ip = getIp(req);
+  authLogger.loginAttempt('local', username, ip);
+
   const db = getDb();
   const user = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(username, username);
 
   if (!user || !bcrypt.compareSync(password, user.password)) {
+    authLogger.loginFailure('local', username, 'Identifiants incorrects', ip);
     return res.status(401).json({ error: 'Identifiants incorrects' });
   }
 
   // La connexion locale est réservée au compte admin local (sans ldap_dn)
   if (user.role !== 'admin' || user.ldap_dn) {
+    authLogger.loginFailure('local', username, 'Compte non autorisé pour la connexion locale', ip);
     return res.status(403).json({ error: 'La connexion locale est réservée au compte administrateur local' });
   }
 
+  authLogger.loginSuccess('local', user.username, user.id, ip);
   const token = issueLocalToken(user);
 
   res.json({
@@ -58,6 +69,8 @@ async function ldapLogin(req, res) {
   }
 
   const { username, password } = result.data;
+  const ip = getIp(req);
+  authLogger.loginAttempt('ldap', username, ip);
 
   // Phase 1 : authentification LDAP (peut lever une erreur réseau ou d'identifiants)
   let ldapUser;
@@ -66,14 +79,17 @@ async function ldapLogin(req, res) {
   } catch (err) {
     console.error('LDAP auth error:', err.message);
     if (err.message === 'LDAP non configuré sur le serveur') {
+      authLogger.loginError('ldap', username, 'LDAP non configuré', ip);
       return res.status(503).json({ error: 'Authentification LDAP non disponible' });
     }
     const isServerError = err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')
       || err.message.includes('délai') || err.message.includes('introuvable')
       || err.message.includes('certificat') || err.message.includes('STARTTLS');
     if (isServerError) {
+      authLogger.loginError('ldap', username, err.message, ip);
       return res.status(503).json({ error: err.message });
     }
+    authLogger.loginFailure('ldap', username, err.message, ip);
     return res.status(401).json({ error: 'Identifiants invalides ou accès refusé' });
   }
 
@@ -107,6 +123,7 @@ async function ldapLogin(req, res) {
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
     }
 
+    authLogger.loginSuccess('ldap', user.username, user.id, ip);
     const token = issueLocalToken(user);
     res.json({
       token,
@@ -122,11 +139,13 @@ async function ldapLogin(req, res) {
     });
   } catch (err) {
     console.error('LDAP login DB error:', err.message);
+    authLogger.loginError('ldap', username, err.message, ip);
     return res.status(500).json({ error: `Erreur interne lors de la connexion : ${err.message}` });
   }
 }
 
 function logout(req, res) {
+  authLogger.logout(req.user?.id, req.user?.username, getIp(req));
   res.json({ message: 'Déconnecté' });
 }
 
