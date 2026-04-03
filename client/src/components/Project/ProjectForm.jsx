@@ -189,7 +189,7 @@ export default function ProjectForm({ project, onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-2" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '98vw', maxWidth: '760px', maxHeight: '95vh' }}
+        style={{ width: '98vw', maxWidth: '1100px', maxHeight: '95vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -204,44 +204,42 @@ export default function ProjectForm({ project, onClose }) {
           </button>
         </div>
 
-        {/* ── Onglets (création uniquement) ── */}
-        {!isEdit && (
-          <div className="flex-shrink-0 flex border-b border-gray-200 bg-gray-50/60 px-6 pt-3 gap-1">
-            <button
-              type="button"
-              onClick={() => setFormTab('project')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-                formTab === 'project'
-                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Projet global
-            </button>
-            <button
-              type="button"
-              onClick={() => setFormTab('tasks')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
-                formTab === 'tasks'
-                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Tâches initiales
-              {formTasks.length > 0 && (
-                <span className="ml-1.5 bg-indigo-100 text-indigo-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
-                  {formTasks.length}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
+        {/* ── Onglets ── */}
+        <div className="flex-shrink-0 flex border-b border-gray-200 bg-gray-50/60 px-6 pt-3 gap-1">
+          <button
+            type="button"
+            onClick={() => setFormTab('project')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+              formTab === 'project'
+                ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Projet global
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormTab('tasks')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+              formTab === 'tasks'
+                ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {isEdit ? 'Tâches' : 'Tâches initiales'}
+            {!isEdit && formTasks.length > 0 && (
+              <span className="ml-1.5 bg-indigo-100 text-indigo-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {formTasks.length}
+              </span>
+            )}
+          </button>
+        </div>
 
         {/* ── Contenu ── */}
         <div className="flex-1 min-h-0 overflow-y-auto">
 
           {/* ── Onglet Projet global ── */}
-          {(formTab === 'project' || isEdit) && (
+          {formTab === 'project' && (
             <form
               id="project-form"
               onSubmit={handleSubmit}
@@ -448,8 +446,13 @@ export default function ProjectForm({ project, onClose }) {
             </form>
           )}
 
-          {/* ── Onglet Tâches initiales ── */}
-          {!isEdit && formTab === 'tasks' && (
+          {/* ── Onglet Tâches ── */}
+          {formTab === 'tasks' && isEdit && (
+            <div className="px-6 py-12 text-center text-gray-400 text-sm">
+              Les tâches de ce projet se gèrent depuis la vue détaillée du projet.
+            </div>
+          )}
+          {formTab === 'tasks' && !isEdit && (
             <div className="flex flex-col">
 
               {/* En-tête panneau tâches */}
