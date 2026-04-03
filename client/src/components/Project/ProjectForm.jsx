@@ -29,6 +29,7 @@ export default function ProjectForm({ project, onClose }) {
   const [users, setUsers]   = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState('')
+  const [formTab, setFormTab] = useState('project')
 
   // Tâches pré-remplies à créer (seulement en mode création)
   const [formTasks, setFormTasks]     = useState([])
@@ -56,8 +57,27 @@ export default function ProjectForm({ project, onClose }) {
     userService.list().then(setUsers).catch(() => {})
   }, [])
 
+  // Utilisateurs du service sélectionné uniquement
+  const serviceUsers = users.filter((u) => (u.service || u.pole) === form.service)
+
   function set(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function handleServiceChange(newService) {
+    const newServiceUserIds = users
+      .filter((u) => (u.service || u.pole) === newService)
+      .map((u) => u.id)
+    setForm((prev) => ({
+      ...prev,
+      service: newService,
+      // Retirer les membres qui ne sont plus dans le nouveau service
+      member_ids: prev.member_ids.filter((id) => newServiceUserIds.includes(id)),
+      // Réinitialiser le responsable s'il n'est pas dans le nouveau service
+      owner_id: prev.owner_id && newServiceUserIds.includes(parseInt(prev.owner_id))
+        ? prev.owner_id
+        : null,
+    }))
   }
 
   function toggleId(key, id) {
@@ -145,26 +165,21 @@ export default function ProjectForm({ project, onClose }) {
   const totalTaskHours = formTasks.reduce((s, t) => s + (t.duration_hours || 0), 0)
 
   // Membres disponibles pour affectation de tâche :
-  // priorité aux membres déjà sélectionnés, sinon tous les utilisateurs
+  // priorité aux membres déjà sélectionnés (parmi le service), sinon tous du service
   const assignableUsers = form.member_ids.length > 0
-    ? users.filter((u) => form.member_ids.includes(u.id))
-    : users
+    ? serviceUsers.filter((u) => form.member_ids.includes(u.id))
+    : serviceUsers
 
-  // Résout le nom d'un membre depuis son id
   function userName(id) {
     return users.find((u) => u.id === id)?.username || `#${id}`
   }
 
-  // Résout le titre d'une tâche depuis son tempId
   function taskTitle(tempId) {
     return formTasks.find((t) => t.id === tempId)?.title || `tâche #${tempId}`
   }
 
-  // Tâche précédente possible pour le champ depends_on du formulaire
-  // (on ne peut dépendre que d'une tâche déjà ajoutée)
   const availableDeps = formTasks
 
-  // Min start_date pour la nouvelle tâche (dépend de la tâche précédente sélectionnée)
   const depTask = newTaskInput.depends_on
     ? formTasks.find((t) => t.id === Number(newTaskInput.depends_on))
     : null
@@ -174,7 +189,7 @@ export default function ProjectForm({ project, onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-2" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '98vw', maxWidth: '1600px', height: '95vh' }}
+        style={{ width: '98vw', maxWidth: '760px', maxHeight: '95vh' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -189,229 +204,274 @@ export default function ProjectForm({ project, onClose }) {
           </button>
         </div>
 
-        {/* ── Corps : deux colonnes égales ── */}
-        <div className="flex flex-1 min-h-0">
+        {/* ── Onglets (création uniquement) ── */}
+        {!isEdit && (
+          <div className="flex-shrink-0 flex border-b border-gray-200 bg-gray-50/60 px-6 pt-3 gap-1">
+            <button
+              type="button"
+              onClick={() => setFormTab('project')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                formTab === 'project'
+                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Projet global
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormTab('tasks')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                formTab === 'tasks'
+                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Tâches initiales
+              {formTasks.length > 0 && (
+                <span className="ml-1.5 bg-indigo-100 text-indigo-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+                  {formTasks.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
 
-          {/* ── Colonne gauche : champs projet ── */}
-          <form
-            id="project-form"
-            onSubmit={handleSubmit}
-            className="flex-1 min-w-0 overflow-y-auto px-6 py-4 space-y-4 border-r border-gray-200"
-          >
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
-              <input
-                type="text"
-                value={form.title}
-                onChange={(e) => set('title', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                required
-                autoFocus
-              />
-            </div>
+        {/* ── Contenu ── */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
 
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => set('description', e.target.value)}
-                rows={3}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-              />
-            </div>
-
-            {/* Service + Priority */}
-            <div className="grid grid-cols-2 gap-4">
+          {/* ── Onglet Projet global ── */}
+          {(formTab === 'project' || isEdit) && (
+            <form
+              id="project-form"
+              onSubmit={handleSubmit}
+              className="px-6 py-5 space-y-4"
+            >
+              {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Service *</label>
-                <select
-                  value={form.service}
-                  onChange={(e) => set('service', e.target.value)}
-                  disabled={!canChangeService}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50"
-                >
-                  {VALID_SERVICES.map((s) => (
-                    <option key={s} value={s}>
-                      {SERVICE_CONFIG[s]?.icon} {SERVICE_CONFIG[s]?.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priorité</label>
-                <select
-                  value={form.priority}
-                  onChange={(e) => set('priority', e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {PRIORITIES.map((p) => (
-                    <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
-              <select
-                value={form.status}
-                onChange={(e) => set('status', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Dates planifiées */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
                 <input
-                  type="date"
-                  value={form.start_date}
-                  onChange={(e) => set('start_date', e.target.value)}
+                  type="text"
+                  value={form.title}
+                  onChange={(e) => set('title', e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  required
+                  autoFocus
                 />
               </div>
+
+              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date de fin</label>
-                <input
-                  type="date"
-                  value={form.due_date}
-                  onChange={(e) => set('due_date', e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
                 />
               </div>
-            </div>
 
-            {/* Contraintes temporelles */}
-            <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50/50">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-700">Contraintes temporelles</span>
-                <span className="text-xs text-gray-400">au plus tôt / au plus tard</span>
-              </div>
+              {/* Service + Priority */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Au plus tôt</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service *</label>
+                  <select
+                    value={form.service}
+                    onChange={(e) => handleServiceChange(e.target.value)}
+                    disabled={!canChangeService}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50"
+                  >
+                    {VALID_SERVICES.map((s) => (
+                      <option key={s} value={s}>
+                        {SERVICE_CONFIG[s]?.icon} {SERVICE_CONFIG[s]?.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priorité</label>
+                  <select
+                    value={form.priority}
+                    onChange={(e) => set('priority', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Statut</label>
+                <select
+                  value={form.status}
+                  onChange={(e) => set('status', e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Dates planifiées */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de début</label>
                   <input
                     type="date"
-                    value={form.earliest_start}
-                    onChange={(e) => set('earliest_start', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    value={form.start_date}
+                    onChange={(e) => set('start_date', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Au plus tard</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de fin</label>
                   <input
                     type="date"
-                    value={form.latest_end}
-                    onChange={(e) => set('latest_end', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    value={form.due_date}
+                    onChange={(e) => set('due_date', e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Owner */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
-              <select
-                value={form.owner_id || ''}
-                onChange={(e) => set('owner_id', e.target.value || null)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">— Aucun —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Members */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Membres impliqués</label>
-              <div className="flex flex-wrap gap-3">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => toggleId('member_ids', u.id)}
-                    className={`px-5 py-2 rounded-full text-sm font-semibold border-2 transition-colors ${
-                      form.member_ids.includes(u.id)
-                        ? 'bg-indigo-600 text-white border-indigo-600'
-                        : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'
-                    }`}
-                  >
-                    {u.username}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tags */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Tags</label>
-              <div className="flex flex-wrap gap-3">
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    onClick={() => toggleId('tag_ids', tag.id)}
-                    className={`px-5 py-2 rounded-full text-sm font-semibold border-2 transition-colors ${
-                      form.tag_ids.includes(tag.id)
-                        ? 'text-white'
-                        : 'bg-white text-gray-600 border-gray-300'
-                    }`}
-                    style={
-                      form.tag_ids.includes(tag.id)
-                        ? { backgroundColor: tag.color, borderColor: tag.color }
-                        : {}
-                    }
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {error && (
-              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
-          </form>
-
-          {/* ── Colonne droite : tâches initiales (création uniquement) ── */}
-          {!isEdit && (
-            <div className="flex-1 min-w-0 flex flex-col bg-gray-50/60">
-
-              {/* En-tête panneau tâches */}
-              <div className="flex-shrink-0 px-5 py-3 border-b border-gray-200 bg-white">
-                <div className="flex items-center justify-between">
+              {/* Contraintes temporelles */}
+              <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50/50">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Contraintes temporelles</span>
+                  <span className="text-xs text-gray-400">au plus tôt / au plus tard</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-800">
-                      Tâches initiales
-                      <span className="ml-1.5 text-gray-400 font-normal">({formTasks.length})</span>
-                      {(totalTaskDays > 0 || totalTaskHours > 0) && (
-                        <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-normal">
-                          {totalTaskDays > 0 && `${totalTaskDays}j`}{totalTaskDays > 0 && totalTaskHours > 0 && ' '}{totalTaskHours > 0 && `${totalTaskHours}h`} total
-                        </span>
-                      )}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Optionnel — créées avec le projet</p>
+                    <label className="block text-xs text-gray-500 mb-1">Au plus tôt</label>
+                    <input
+                      type="date"
+                      value={form.earliest_start}
+                      onChange={(e) => set('earliest_start', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Au plus tard</label>
+                    <input
+                      type="date"
+                      value={form.latest_end}
+                      onChange={(e) => set('latest_end', e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Liste des tâches ajoutées */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {/* Owner — filtré par service */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
+                <select
+                  value={form.owner_id || ''}
+                  onChange={(e) => set('owner_id', e.target.value || null)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">— Aucun —</option>
+                  {serviceUsers.map((u) => (
+                    <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
+                  ))}
+                </select>
+                {serviceUsers.length === 0 && (
+                  <p className="text-xs text-gray-400 mt-1">Aucun utilisateur dans ce service</p>
+                )}
+              </div>
+
+              {/* Members — filtrés par service */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Membres impliqués
+                  <span className="ml-1.5 text-xs text-gray-400 font-normal">
+                    ({SERVICE_CONFIG[form.service]?.icon} {SERVICE_CONFIG[form.service]?.label})
+                  </span>
+                </label>
+                {serviceUsers.length === 0 ? (
+                  <p className="text-sm text-gray-400 italic">Aucun utilisateur dans ce service</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {serviceUsers.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleId('member_ids', u.id)}
+                        className={`px-4 py-1.5 rounded-full text-sm font-semibold border-2 transition-colors ${
+                          form.member_ids.includes(u.id)
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-indigo-400'
+                        }`}
+                      >
+                        {u.username}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Tags</label>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleId('tag_ids', tag.id)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-semibold border-2 transition-colors ${
+                        form.tag_ids.includes(tag.id)
+                          ? 'text-white'
+                          : 'bg-white text-gray-600 border-gray-300'
+                      }`}
+                      style={
+                        form.tag_ids.includes(tag.id)
+                          ? { backgroundColor: tag.color, borderColor: tag.color }
+                          : {}
+                      }
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {error}
+                </div>
+              )}
+            </form>
+          )}
+
+          {/* ── Onglet Tâches initiales ── */}
+          {!isEdit && formTab === 'tasks' && (
+            <div className="flex flex-col">
+
+              {/* En-tête panneau tâches */}
+              <div className="px-6 py-3 border-b border-gray-100 bg-gray-50/60">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-gray-800">
+                    Tâches initiales
+                    <span className="ml-1.5 text-gray-400 font-normal">({formTasks.length})</span>
+                  </h3>
+                  {(totalTaskDays > 0 || totalTaskHours > 0) && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      {totalTaskDays > 0 && `${totalTaskDays}j`}{totalTaskDays > 0 && totalTaskHours > 0 && ' '}{totalTaskHours > 0 && `${totalTaskHours}h`} total
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400 ml-auto">Optionnel — créées avec le projet</span>
+                </div>
+              </div>
+
+              {/* Liste des tâches */}
+              <div className="px-6 py-3 space-y-2">
                 {formTasks.length === 0 && (
-                  <p className="text-xs text-gray-400 italic text-center py-8">
+                  <p className="text-xs text-gray-400 italic text-center py-6">
                     Utilisez le formulaire ci-dessous pour ajouter des tâches
                   </p>
                 )}
@@ -420,7 +480,6 @@ export default function ProjectForm({ project, onClose }) {
                     key={task.id}
                     className="rounded-lg border border-gray-200 bg-white px-4 py-3 space-y-1.5"
                   >
-                    {/* Ligne principale */}
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                         {idx + 1}
@@ -436,7 +495,6 @@ export default function ProjectForm({ project, onClose }) {
                         title="Supprimer"
                       >✕</button>
                     </div>
-                    {/* Infos secondaires */}
                     <div className="pl-8 flex flex-wrap gap-x-3 gap-y-0.5">
                       {(task.start_date || task.due_date) && (
                         <span className="text-xs text-gray-400">
@@ -464,8 +522,8 @@ export default function ProjectForm({ project, onClose }) {
               </div>
 
               {/* ── Formulaire ajout tâche ── */}
-              <div className="flex-shrink-0 border-t border-gray-200 bg-white">
-                <form onSubmit={handleAddFormTask} className="px-4 py-4 space-y-3">
+              <div className="border-t border-gray-200 bg-gray-50/60 px-6 py-4">
+                <form onSubmit={handleAddFormTask} className="space-y-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nouvelle tâche</p>
 
                   {/* Titre + durée */}
