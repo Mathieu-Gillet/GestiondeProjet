@@ -218,10 +218,11 @@ export default function AdminUsersPage() {
   const navigate  = useNavigate()
   const currentUser = useAuthStore((s) => s.user)
 
-  const [users,   setUsers]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [form,    setForm]    = useState(null)
-  const [search,  setSearch]  = useState('')
+  const [users,      setUsers]      = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [form,       setForm]       = useState(null)
+  const [search,     setSearch]     = useState('')
+  const [serviceTab, setServiceTab] = useState('all')
 
   useEffect(() => {
     if (currentUser && currentUser.role !== 'admin') navigate('/')
@@ -242,9 +243,14 @@ export default function AdminUsersPage() {
     setUsers((prev) => prev.filter((u) => u.id !== user.id))
   }
 
+  // Services présents dans la liste, dans l'ordre de SERVICE_CONFIG
+  const presentServices = VALID_SERVICES.filter((s) => users.some((u) => (u.service || u.pole) === s))
+
   const filtered = users.filter((u) => {
     const q = search.toLowerCase()
-    return !q || u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    const matchSearch = !q || u.username.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    const matchService = serviceTab === 'all' || (u.service || u.pole) === serviceTab
+    return matchSearch && matchService
   })
 
   return (
@@ -263,6 +269,43 @@ export default function AdminUsersPage() {
           </svg>
           Nouveau compte
         </button>
+      </div>
+
+      {/* Sous-onglets par service */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+        <button
+          onClick={() => setServiceTab('all')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            serviceTab === 'all'
+              ? 'bg-gray-900 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Tous
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${serviceTab === 'all' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-500'}`}>
+            {users.length}
+          </span>
+        </button>
+        {presentServices.map((s) => {
+          const cfg   = SERVICE_CONFIG[s]
+          const count = users.filter((u) => (u.service || u.pole) === s).length
+          const active = serviceTab === s
+          return (
+            <button
+              key={s}
+              onClick={() => setServiceTab(s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                active ? `${cfg.color} ring-1 ring-current` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <span>{cfg.icon}</span>
+              {cfg.label}
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${active ? 'bg-white/40' : 'bg-gray-200 text-gray-500'}`}>
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       <div className="relative mb-4">
@@ -295,7 +338,11 @@ export default function AdminUsersPage() {
               <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-sm">Chargement...</td></tr>
             )}
             {!loading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-sm">Aucun compte trouvé.</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-sm">
+                {serviceTab !== 'all'
+                  ? `Aucun compte dans ${SERVICE_CONFIG[serviceTab]?.label || serviceTab}${search ? ' pour cette recherche' : ''}.`
+                  : 'Aucun compte trouvé.'}
+              </td></tr>
             )}
             {filtered.map((u) => {
               const role = ROLE_CONFIG[u.role] || { label: u.role, color: 'bg-gray-100 text-gray-600' }
