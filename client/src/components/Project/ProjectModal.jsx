@@ -260,7 +260,7 @@ export default function ProjectModal({ projectId, onClose }) {
         {/* Fenêtre 90 vw × 90 vh */}
         <div
           className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          style={{ width: '98vw', height: '97vh' }}
+          style={{ width: '98vw', maxWidth: '1100px', maxHeight: '95vh' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
