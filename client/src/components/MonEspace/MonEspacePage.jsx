@@ -960,6 +960,31 @@ export default function MonEspacePage() {
   const [pendingValidationCount, setPendingValidationCount] = useState(0)
   const [submitSuccess, setSubmitSuccess] = useState('')
 
+  // Quota d'heures mensuel — persistant dans localStorage par utilisateur
+  const quotaKey = user?.id ? `monespace_quota_${user.id}` : null
+  const [monthlyQuota,    setMonthlyQuota]    = useState(() => {
+    if (!quotaKey) return 0
+    const v = localStorage.getItem(quotaKey)
+    return v ? parseInt(v, 10) : 0
+  })
+  const [editingQuota, setEditingQuota] = useState(false)
+  const [quotaDraft,   setQuotaDraft]   = useState('')
+
+  function openQuotaEdit() {
+    setQuotaDraft(monthlyQuota > 0 ? String(monthlyQuota) : '')
+    setEditingQuota(true)
+  }
+  function saveQuota() {
+    const v = parseInt(quotaDraft, 10)
+    const next = isNaN(v) || v < 0 ? 0 : v
+    setMonthlyQuota(next)
+    if (quotaKey) {
+      if (next > 0) localStorage.setItem(quotaKey, String(next))
+      else localStorage.removeItem(quotaKey)
+    }
+    setEditingQuota(false)
+  }
+
   const isLead = canManage(user)
 
   const fetchTasks = useCallback(async () => {
@@ -1129,19 +1154,66 @@ export default function MonEspacePage() {
             </div>
           )}
 
-          {monthlyHours > 0 && (
-            <div className="bg-purple-50 rounded-lg border border-purple-200 px-4 py-3 flex items-center gap-3">
-              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-xl font-bold text-purple-700">{monthlyHours}h</p>
-                <p className="text-xs text-purple-600">ce mois-ci</p>
-              </div>
+          <div className="bg-purple-50 rounded-lg border border-purple-200 px-4 py-3 flex items-center gap-3 min-w-[180px]">
+            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
-          )}
+            <div className="flex-1 min-w-0">
+              {editingQuota ? (
+                <form onSubmit={(e) => { e.preventDefault(); saveQuota() }} className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="999"
+                    value={quotaDraft}
+                    onChange={(e) => setQuotaDraft(e.target.value)}
+                    placeholder="ex. 140"
+                    autoFocus
+                    className="w-20 border border-purple-300 rounded px-2 py-0.5 text-sm text-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  />
+                  <span className="text-xs text-purple-600">h</span>
+                  <button type="submit" className="text-xs text-purple-700 font-medium hover:underline">OK</button>
+                  <button type="button" onClick={() => setEditingQuota(false)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                </form>
+              ) : (
+                <div className="flex items-baseline gap-1.5">
+                  <p className="text-xl font-bold text-purple-700 leading-none">{monthlyHours}h</p>
+                  {monthlyQuota > 0 && (
+                    <p className="text-xs text-purple-500 font-medium">/ {monthlyQuota}h</p>
+                  )}
+                  <button
+                    onClick={openQuotaEdit}
+                    title={monthlyQuota > 0 ? 'Modifier le quota' : 'Définir un quota mensuel'}
+                    className="ml-0.5 text-purple-300 hover:text-purple-600 transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              {!editingQuota && monthlyQuota > 0 && (
+                <div className="mt-1.5">
+                  <div className="w-full h-1.5 bg-purple-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${monthlyHours > monthlyQuota ? 'bg-red-500' : 'bg-purple-500'}`}
+                      style={{ width: `${Math.min(100, Math.round((monthlyHours / monthlyQuota) * 100))}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-purple-500 mt-0.5">
+                    {monthlyHours > monthlyQuota
+                      ? `+${monthlyHours - monthlyQuota}h dépassé`
+                      : `${monthlyQuota - monthlyHours}h restantes`}
+                  </p>
+                </div>
+              )}
+              {!editingQuota && monthlyQuota === 0 && (
+                <p className="text-xs text-purple-500">ce mois-ci</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
