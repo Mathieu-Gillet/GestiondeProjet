@@ -21,6 +21,7 @@ export default function ProjectModal({ projectId, onClose }) {
   const [expandedDiscussionId, setExpandedDiscussionId] = useState(null)
   const [taskCommentsMap, setTaskCommentsMap]           = useState({})
   const [newTaskCommentMap, setNewTaskCommentMap]       = useState({})
+  const [mainTab, setMainTab]           = useState('project')
   const [activeTab, setActiveTab]       = useState('comments')
   const [activeTaskTab, setActiveTaskTab] = useState('todo')
   const [confirmAction, setConfirmAction] = useState(null)
@@ -253,13 +254,13 @@ export default function ProjectModal({ projectId, onClose }) {
     <>
       {/* Overlay */}
       <div
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-[5vh_5vw]"
+        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2"
         onClick={onClose}
       >
         {/* Fenêtre 90 vw × 90 vh */}
         <div
           className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          style={{ width: '90vw', height: '90vh' }}
+          style={{ width: '98vw', height: '97vh' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* ── Header ── */}
@@ -303,12 +304,45 @@ export default function ProjectModal({ projectId, onClose }) {
             </div>
           </div>
 
-          {/* ── Corps : panneau gauche + panneau droit ── */}
-          <div className="flex flex-1 min-h-0">
+          {/* ── Onglets principaux ── */}
+          <div className="flex-shrink-0 flex border-b border-gray-200 bg-gray-50/60 px-6 pt-3 gap-1">
+            <button
+              type="button"
+              onClick={() => setMainTab('project')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                mainTab === 'project'
+                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Projet
+            </button>
+            <button
+              type="button"
+              onClick={() => setMainTab('tasks')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 transition-colors ${
+                mainTab === 'tasks'
+                  ? 'bg-white border-gray-200 text-indigo-700 -mb-px'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Tâches
+              {tasks.length > 0 && (
+                <span className={`ml-1.5 text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                  mainTab === 'tasks' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {tasks.length}
+                </span>
+              )}
+            </button>
+          </div>
 
-            {/* ── Panneau gauche : détails + onglets ── */}
-            <div className="flex-1 min-w-0 flex flex-col border-r border-gray-200 overflow-hidden">
-              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* ── Contenu ── */}
+          <div className="flex-1 min-h-0 flex flex-col">
+
+            {/* ── Onglet Projet ── */}
+            {mainTab === 'project' && (
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
                 {project.description && (
                   <p className="text-sm text-gray-600 leading-relaxed">{project.description}</p>
@@ -485,13 +519,14 @@ export default function ProjectModal({ projectId, onClose }) {
                     ))}
                   </div>
                 )}
-              </div>
             </div>
+            )}
 
-            {/* ── Panneau droit : Tâches ── */}
-            <div className="flex-1 min-w-0 flex flex-col bg-gray-50/60">
-              {/* En-tête panneau tâches */}
-              <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
+            {/* ── Onglet Tâches ── */}
+            {mainTab === 'tasks' && (
+            <div className="flex-1 min-h-0 flex flex-col bg-gray-50/30">
+              {/* En-tête tâches */}
+              <div className="flex-shrink-0 px-6 py-3 border-b border-gray-200 bg-white">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-gray-800">
                     Tâches
@@ -530,7 +565,7 @@ export default function ProjectModal({ projectId, onClose }) {
               </div>
 
               {/* ── Sub-tabs statuts ── */}
-              <div className="flex-shrink-0 px-3 pt-3 pb-0">
+              <div className="flex-shrink-0 px-6 pt-3 pb-0">
                 <div className="flex border-b border-gray-200">
                   {[
                     { key: 'todo',        label: 'À faire',  color: 'text-gray-600' },
@@ -562,7 +597,7 @@ export default function ProjectModal({ projectId, onClose }) {
               </div>
 
               {/* Liste des tâches */}
-              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
+              <div className="flex-1 overflow-y-auto px-6 py-3 space-y-1.5">
                 {tasks.filter((t) => t.status === activeTaskTab).length === 0 && (
                   <p className="text-xs text-gray-400 italic text-center py-6">
                     Aucune tâche dans cet onglet
@@ -889,7 +924,7 @@ export default function ProjectModal({ projectId, onClose }) {
 
               {/* Formulaire ajout tâche */}
               {canEdit && (
-                <div className="flex-shrink-0 px-3 py-3 border-t border-gray-200 bg-white">
+                <div className="flex-shrink-0 px-6 py-3 border-t border-gray-200 bg-white">
                   <form onSubmit={handleAddTask} className="space-y-2">
                     <input
                       type="text"
@@ -1001,6 +1036,7 @@ export default function ProjectModal({ projectId, onClose }) {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
       </div>

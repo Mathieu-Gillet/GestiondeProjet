@@ -33,7 +33,7 @@ function NewDiagramModal({ onClose, onCreate }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-4">Nouveau diagramme de flux</h2>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div>

@@ -737,12 +737,12 @@ function GanttTimeline({ projects, allTasks, onSubmitRequests }) {
       {/* ── Modale de soumission ── */}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
             <div className="px-6 py-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900">Demande de modification de dates</h2>
               <p className="text-xs text-gray-500 mt-0.5">Ces modifications devront être approuvées par votre responsable.</p>
             </div>
-            <div className="px-6 py-4 space-y-3 max-h-64 overflow-y-auto">
+            <div className="px-6 py-4 space-y-3 max-h-96 overflow-y-auto">
               {Array.from(pendingChanges.values()).map(({ task, newStartDate, newDueDate, origStart, origEnd }) => (
                 <div key={task.id} className="bg-gray-50 rounded-lg px-4 py-3 text-xs">
                   <p className="font-semibold text-gray-800 mb-1">{task.title}</p>
